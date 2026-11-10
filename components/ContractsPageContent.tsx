@@ -1,0 +1,363 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { useLanguage } from "@/context/LanguageContext";
+import { motion, AnimatePresence } from "framer-motion";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { 
+  Search, 
+  Calendar, 
+  ArrowRight, 
+  Download, 
+  Star, 
+  CreditCard, 
+  AlertTriangle,
+  FolderOpen,
+  ArrowUpRight,
+  User,
+  Hash,
+  Plus
+} from "lucide-react";
+import { Separator } from "@/components/ui/separator";
+import FadeContent from "@/components/ui/fade-content";
+
+interface Props {
+  contracts: any[];
+  role: "client" | "worker";
+}
+
+export default function ContractsPageContent({ contracts = [], role }: Props) {
+  const { t } = useLanguage();
+  const [activeTab, setActiveTab] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const downloadContractPdf = async (pdfUrl: string, contractId: string) => {
+    const response = await fetch(pdfUrl, {
+      credentials: "include",
+      cache: "no-store",
+    });
+
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      alert(data?.error || "Contract PDF is not available yet.");
+      return;
+    }
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = `direskill-contract-${contractId}.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(objectUrl);
+  };
+
+  const tabs = [
+    { id: "all", label: t("contracts.all") },
+    { id: "active", label: t("contracts.active") },
+    { id: "pending", label: t("contracts.pending") },
+    { id: "completed", label: t("contracts.completed") },
+    { id: "disputed", label: t("contracts.disputed") },
+  ];
+
+  const filteredContracts = contracts.filter((c) => {
+    const matchesTab = 
+      activeTab === "all" ||
+      (activeTab === "active" && (c.contract_status === "ACTIVE" || c.job_status === "active")) ||
+      (activeTab === "pending" && ["DRAFT", "READY_FOR_SIGNATURE", "CLIENT_SIGNED", "WORKER_SIGNED"].includes(c.contract_status)) ||
+      (activeTab === "completed" && ["completed", "payment_pending", "paid", "closed"].includes(c.job_status)) ||
+      (activeTab === "disputed" && c.job_status === "disputed");
+
+    const matchesSearch = 
+      c.job_title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.partner_name?.toLowerCase().includes(searchQuery.toLowerCase());
+
+    return matchesTab && matchesSearch;
+  });
+
+  return (
+    <FadeContent blur duration={0.4} className="space-y-6 pb-24 max-w-full">
+      
+      {/* ── Page Header ── */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-widest text-primary">
+            {t("contracts.repository")}
+          </p>
+          <h1 className="hidden sm:block text-2xl sm:text-3xl font-extrabold tracking-tight mt-0.5">
+            {t("contracts.title")}
+          </h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+            {t("contracts.desc")}
+          </p>
+        </div>
+        
+        {role === "client" && (
+          <Button asChild className="rounded-full font-black text-xs uppercase tracking-wider bg-[#a3e635] text-black hover:opacity-90 shadow-[0_4px_14px_rgba(163,230,53,0.3)] shrink-0 h-11 px-5">
+            <Link href="/client/search">
+              <Plus className="mr-1.5 h-4 w-4 stroke-[2.5]" /> {t("contracts.new")}
+            </Link>
+          </Button>
+        )}
+      </header>
+
+      {/* ── Tabs Navigation & Search ── */}
+      <div className="flex flex-col lg:flex-row lg:items-center gap-4 justify-between bg-surface-container/60 p-3 sm:p-4 rounded-3xl border border-outline-variant/60 shadow-sm">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full lg:w-auto">
+          <TabsList className="bg-surface-container-low p-1 rounded-full h-11 border border-outline-variant/40 w-full lg:w-auto flex overflow-x-auto no-scrollbar gap-1">
+            {tabs.map((tab) => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                className="rounded-full text-xs font-black px-4 py-2 uppercase tracking-wider h-9 flex-1 lg:flex-none text-center data-[state=active]:bg-[#a3e635] data-[state=active]:text-black transition-all"
+              >
+                {tab.label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        <div className="relative flex-grow max-w-md group w-full">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant opacity-60" size={16} />
+          <Input 
+            type="text"
+            placeholder={t("contracts.search_detailed")}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-11 h-11 rounded-full bg-surface-container-low border-outline-variant/60 text-sm text-on-surface placeholder:text-on-surface-variant/40 focus:border-[#a3e635]/60 focus:ring-1 focus:ring-[#a3e635]/20 transition-all"
+          />
+        </div>
+      </div>
+
+      {/* ── Contracts List/Grid ── */}
+      {filteredContracts.length > 0 ? (
+        <section className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          <AnimatePresence mode="popLayout">
+            {filteredContracts.map((contract, index) => {
+              const status = contract.contract_status || contract.job_status;
+              const isCompleted = ["paid", "closed"].includes(contract.job_status);
+              const canRatePartner = isCompleted && !contract.user_has_rated;
+              const isDisputed = contract.job_status === 'disputed';
+              const canOpenDispute = ["accepted", "active", "in_progress", "completion_requested", "completed", "payment_pending", "paid"].includes(contract.job_status);
+              const isDraft = status === "DRAFT";
+              const isPending = !contract.signed_at;
+              const partnerInitials = (contract.partner_name || "P").slice(0, 2).toUpperCase();
+              const displayId = contract.contract_id ? `#${contract.contract_id.slice(0, 8).toUpperCase()}` : "N/A";
+
+              return (
+                <motion.div 
+                  key={contract.contract_id}
+                  layout
+                  initial={{ opacity: 0, y: 15 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: Math.min(index * 0.05, 0.3) }}
+                  className="w-full flex"
+                >
+                  {/* Premium Shopnest card */}
+                  <Card className="border border-outline-variant/60 bg-[#0e141d] shadow-sm hover:shadow-md hover:border-[#a3e635]/40 hover:scale-[1.01] transition-all duration-200 rounded-3xl overflow-hidden flex flex-col justify-between w-full group">
+                    <div className="p-5 flex flex-col gap-4 flex-1">
+                      
+                      {/* Header block with avatar */}
+                      <div className="flex items-center gap-3">
+                        <Avatar className="h-11 w-11 rounded-2xl border border-outline-variant/60 shrink-0 ring-2 ring-[#a3e635]/15">
+                          {contract.partner_avatar && <AvatarImage src={contract.partner_avatar} />}
+                          <AvatarFallback className="text-xs font-bold bg-surface-container text-on-surface-variant rounded-2xl">
+                            {partnerInitials}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <h3 className="text-sm font-bold text-on-surface truncate group-hover:text-[#a3e635] transition-colors">
+                            {contract.partner_name}
+                          </h3>
+                          <p className="text-[10px] font-black uppercase tracking-widest text-on-surface-variant opacity-60 mt-0.5">
+                            {role === "client" ? t("contracts.partner.verifiedContractor") : t("contracts.partner.clientAccount")}
+                          </p>
+                        </div>
+                        <Badge 
+                          variant="outline" 
+                          className={`rounded-full text-[9px] uppercase font-bold tracking-wider px-2.5 py-0.5 border ${getStatusStyles(status)}`}
+                        >
+                          {getStatusLabel(status, contract.signed_at, t)}
+                        </Badge>
+                      </div>
+
+                      <Separator className="bg-outline-variant/30" />
+
+                      {/* Detail row key-value pairs */}
+                      <div className="space-y-2 text-xs">
+                        {/* Service Title */}
+                        <div className="flex justify-between items-start py-1 gap-4">
+                          <span className="text-on-surface-variant opacity-60 font-semibold shrink-0">{t("contracts.serviceJob")}</span>
+                          <span className="font-bold text-on-surface text-right truncate max-w-[180px]">{contract.job_title}</span>
+                        </div>
+
+                        {/* Contract ID */}
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-on-surface-variant opacity-60 font-semibold flex items-center gap-1"><Hash size={12} /> {t("contracts.contractId")}</span>
+                          <span className="font-mono font-bold text-[10px] text-on-surface">{displayId}</span>
+                        </div>
+
+                        {/* Date Created */}
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-on-surface-variant opacity-60 font-semibold flex items-center gap-1"><Calendar size={12} /> {t("contracts.dateCreated")}</span>
+                          <span className="font-bold text-on-surface">
+                            {new Date(contract.contract_created_at).toLocaleDateString(undefined, { 
+                              month: 'short', 
+                              day: 'numeric',
+                              year: 'numeric' 
+                            })}
+                          </span>
+                        </div>
+
+                        {/* Agreed Budget */}
+                        <div className="flex justify-between items-center py-1">
+                          <span className="text-on-surface-variant opacity-60 font-semibold flex items-center gap-1"><CreditCard size={12} /> {t("contracts.budgetLabel")}</span>
+                          <span className="font-extrabold text-[#a3e635]">
+                            {contract.budget ? `${contract.budget.toLocaleString()} ETB` : "—"}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Bottom Action buttons */}
+                    <div className="p-5 pt-0 border-t border-outline-variant/30 flex flex-col gap-2">
+                      <div className="flex gap-2 w-full pt-4">
+                        <Button asChild className="flex-1 rounded-full text-xs font-black uppercase tracking-wider h-11 bg-[#a3e635] text-black hover:opacity-90 shadow-[0_4px_14px_rgba(163,230,53,0.25)] active:scale-95 duration-150">
+                          <Link href={`/contracts/${contract.contract_id}`}>
+                            <span>{isDraft ? (role === "client" ? t("contracts.openDraft") : t("contracts.reviewDraft")) : isPending ? t("contracts.reviewSign") : t("contracts.manage")}</span>
+                            <ArrowRight size={13} className="ml-1.5 stroke-[2.5]" />
+                          </Link>
+                        </Button>
+                        
+                        {contract.pdf_url && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="icon"
+                            onClick={() => downloadContractPdf(contract.pdf_url, contract.contract_id)}
+                            className="rounded-full h-11 w-11 shrink-0 border-outline-variant/60 hover:text-[#a3e635] hover:border-[#a3e635] active:scale-95 duration-150"
+                            title={t("contracts.downloadAgreement")}
+                            aria-label={t("contracts.downloadAgreement")}
+                          >
+                            <Download size={14} />
+                          </Button>
+                        )}
+                      </div>
+
+                      {canRatePartner && (
+                        <Button variant="outline" size="sm" className="w-full rounded-full text-xs font-bold uppercase tracking-wider h-10 text-[#a3e635] border-[#a3e635]/30 hover:bg-[#a3e635]/10 active:scale-95 duration-150" asChild>
+                          <Link href={role === 'client' ? `/client/rate/${contract.job_id}` : `/worker/rate/${contract.job_id}`}>
+                            <Star size={12} className="mr-1.5 fill-[#a3e635] stroke-none" />
+                            {t("contracts.ratePartner")}
+                          </Link>
+                        </Button>
+                      )}
+
+                      {role === 'client' && ["completed", "payment_pending"].includes(contract.job_status) && (
+                        <Button size="sm" className="w-full rounded-full text-xs font-black uppercase tracking-wider h-10 bg-[#a3e635] text-black hover:opacity-90 shadow-[0_4px_14px_rgba(163,230,53,0.25)] active:scale-95 duration-150" asChild>
+                          <Link href={`/client/pay/${contract.job_id}`}>
+                            <CreditCard size={12} className="mr-1.5 stroke-[2.5]" />
+                            {t("contracts.completePayment")}
+                          </Link>
+                        </Button>
+                      )}
+
+                      {canOpenDispute && !isDisputed && (
+                        <Button variant="outline" size="sm" className="w-full rounded-full text-xs font-bold uppercase tracking-wider h-10 text-rose-500 border-rose-500/30 hover:bg-rose-500/10 active:scale-95 duration-150" asChild>
+                          <Link href={`/${role}/disputes/new`}>
+                            <AlertTriangle size={12} className="mr-1.5" />
+                            Open Dispute
+                          </Link>
+                        </Button>
+                      )}
+
+                      {isDisputed && (
+                        <Button variant="outline" size="sm" className="w-full rounded-full text-xs font-bold uppercase tracking-wider h-10 text-rose-500 border-rose-500/30 hover:bg-rose-500/10 active:scale-95 duration-150" asChild>
+                          <Link href={`/${role}/disputes`}>
+                            <AlertTriangle size={12} className="mr-1.5" />
+                            {t("contracts.openResolution")}
+                          </Link>
+                        </Button>
+                      )}
+                    </div>
+                  </Card>
+                </motion.div>
+              );
+            })}
+          </AnimatePresence>
+        </section>
+      ) : (
+        /* Empty State */
+        <Card className="border border-dashed border-outline-variant p-16 text-center bg-surface-container-lowest shadow-sm rounded-2xl">
+          <CardContent className="space-y-4 pt-6">
+            <div className="w-14 h-14 rounded-2xl bg-surface-container flex items-center justify-center mx-auto text-on-surface-variant/60">
+              <FolderOpen size={24} />
+            </div>
+            <div className="max-w-xs mx-auto space-y-1">
+              <p className="font-black text-sm uppercase tracking-wide text-on-surface">{t("contracts.emptyRepository")}</p>
+              <p className="text-xs text-on-surface-variant opacity-60 leading-relaxed">
+                {t("contracts.emptyFilteredDesc")}
+              </p>
+            </div>
+            <Button size="sm" variant="outline" className="rounded-xl border-outline-variant font-bold uppercase tracking-wider text-xs px-4" asChild>
+              <Link href={role === "client" ? "/client/search" : "/worker/dashboard"}>
+                {role === "client" ? t("contracts.exploreProfessionals") : t("contracts.visitDashboard")}
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+    </FadeContent>
+  );
+}
+
+function getStatusLabel(status: string, signedAt: string | null, t: (key: any) => string) {
+  switch (status) {
+    case "DRAFT": return t("contracts.status.draft");
+    case "READY_FOR_SIGNATURE": return t("contracts.status.readyToSign");
+    case "CLIENT_SIGNED": return t("contracts.status.clientSigned");
+    case "WORKER_SIGNED": return t("contracts.status.workerSigned");
+    case "FULLY_SIGNED": return t("contracts.status.fullySigned");
+    case "ACTIVE": return t("contracts.active");
+  }
+  if (!signedAt) return t("contracts.status.pending_signature");
+  switch (status) {
+    case "active": return t("contracts.status.inProgress");
+    case "completion_requested": return t("contracts.status.completionReview");
+    case "completed": return t("contracts.status.finalized");
+    case "payment_pending": return t("contracts.status.paymentPending");
+    case "paid": return t("contracts.status.paid");
+    case "closed": return t("contracts.status.closed");
+    case "disputed": return t("contracts.status.inDispute");
+    case "cancelled": return t("contracts.status.terminated");
+    default: return status;
+  }
+}
+
+function getStatusStyles(status: string) {
+  switch (status) {
+    case "DRAFT": return "bg-surface-container text-on-surface-variant border-outline-variant/40";
+    case "READY_FOR_SIGNATURE": return "bg-primary/10 text-primary border-primary/20";
+    case "CLIENT_SIGNED":
+    case "WORKER_SIGNED":
+    case "FULLY_SIGNED":
+    case "ACTIVE":
+    case "active": return "bg-primary/10 text-primary border-primary/20";
+    case "completion_requested":
+    case "completed":
+    case "payment_pending":
+    case "paid":
+    case "closed": return "bg-emerald-500/10 text-emerald-500 border-emerald-500/20";
+    case "disputed": return "bg-rose-500/10 text-rose-500 border-rose-500/20";
+    case "cancelled": return "bg-surface-container text-on-surface-variant border-outline-variant/40";
+    default: return "bg-surface-container text-on-surface-variant border-outline-variant/40";
+  }
+}

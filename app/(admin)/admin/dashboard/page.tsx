@@ -1,0 +1,145 @@
+import { sql } from "@/lib/db";
+import { AdminDashboardClient } from "@/components/admin/AdminDashboardClient";
+import { hasAdminPermission, requireAdmin } from "@/lib/admin-authorization";
+import { hasCompleteWorkerIdentity, toWorkerDisplayStatus } from "@/lib/worker-verification";
+
+export const dynamic = "force-dynamic";
+
+export default async function AdminDashboardPage() {
+  const admin = await requireAdmin();
+  const verificationCapabilities = {
+    canRead: hasAdminPermission(admin, "verification.read"),
+    canReview: hasAdminPermission(admin, "verification.review"),
+    canApprove: hasAdminPermission(admin, "verification.approve"),
+    canReject: hasAdminPermission(admin, "verification.reject"),
+  };
+
+  // ── Live Metrics ────────────────────────────────────────────────────
+  const [
+    workerCount,
+    pendingVerifCount,
+    activeContractCount,
+    completedJobsMonthly,
+    disputeCount,
+    revenueResult,
+  ] = await Promise.all([
+    sql`SELECT COUNT(*)::int AS count FROM worker_profiles`,
+    verificationCapabilities.canRead ? sql`
+      SELECT COUNT(*)::int AS count
+      FROM worker_profiles wp
+      JOIN users u ON u.id = wp.user_id
+      WHERE wp.is_verified = false
+         OR wp.verification_status IS DISTINCT FROM 'approved'
+         OR wp.fayda_doc_url IS NULL
+         OR length(wp.fayda_doc_url) = 0
+         OR wp.fin_last4 IS NULL
+         OR length(wp.fin_last4) <> 4
+         OR u.is_suspended = true
+    ` : Promise.resolve([{ count: 0 }]),
+    sql`SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'active'`,
+    sql`SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'completed' AND updated_at >= date_trunc('month', CURRENT_DATE)`,
+    sql`SELECT COUNT(*)::int AS count FROM jobs WHERE status = 'disputed'`,
+    sql`SELECT COALESCE(SUM(commission_amount), 0)::numeric AS total FROM payments WHERE status = 'released'`,
+  ]);
+
+  const totalRevenue = Number(revenueResult[0]?.total ?? 0);
+  const revenueDisplay =
+    totalRevenue >= 1000
+      ? `ETB ${(totalRevenue / 1000).toFixed(1)}K`
+      : `ETB ${totalRevenue.toFixed(0)}`;
+
+  // ── Pending Workers ─────────────────────────────────────────────────
+  const unverifiedWorkers = verificationCapabilities.canRead ? await sql`
+    SELECT
+      wp.user_id,
+      wp.full_name,
+      wp.skills,
+      CASE
+        WHEN wp.fayda_doc_url IS NOT NULL
+         AND length(wp.fayda_doc_url) > 0
+        THEN true
+        ELSE false
+      END AS has_document,
+      wp.fin_last4,
+      wp.avatar_url,
+      wp.verification_status,
+      wp.is_verified,
+      wp.created_at,
+      u.phone,
+      u.email,
+      u.is_suspended
+    FROM worker_profiles wp
+    JOIN users u ON wp.user_id = u.id
+    WHERE wp.is_verified = false
+       OR wp.verification_status IS DISTINCT FROM 'approved'
+       OR wp.fayda_doc_url IS NULL
+       OR length(wp.fayda_doc_url) = 0
+       OR wp.fin_last4 IS NULL
+       OR length(wp.fin_last4) <> 4
+       OR u.is_suspended = true
+    ORDER BY wp.created_at DESC
+    LIMIT 10
+  ` : [];
+
+  const pendingWorkers = (unverifiedWorkers || []).map((worker: any) => {
+    const identityComplete = hasCompleteWorkerIdentity({
+      documentRef: worker.has_document ? "present" : "",
+      finLast4: worker.fin_last4,
+      finEncrypted: worker.fin_last4 ? "present" : "",
+    });
+    return {
+      user_id: worker.user_id,
+      full_name: worker.full_name || "Unknown worker",
+      skills: worker.skills,
+      has_document: Boolean(worker.has_document),
+      avatar_url: worker.avatar_url,
+      phone: worker.phone,
+      verification_status: toWorkerDisplayStatus(
+        worker.verification_status,
+        worker.is_verified,
+        worker.is_suspended,
+        identityComplete,
+      ),
+      is_verified: Boolean(worker.is_verified && identityComplete),
+      is_suspended: Boolean(worker.is_suspended),
+    };
+  });
+
+  // ── Activity Feed ───────────────────────────────────────────────────
+  const recentUsers = await sql`
+    SELECT 'user_signup' AS type, email AS title, created_at
+    FROM users
+    ORDER BY created_at DESC
+    LIMIT 5
+  `;
+
+  const recentJobs = await sql`
+    SELECT 'job_posted' AS type, title, created_at
+    FROM jobs
+    ORDER BY created_at DESC
+    LIMIT 5
+  `;
+
+  const activityFeed = [...recentUsers, ...recentJobs]
+    .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    .slice(0, 10)
+    .map((item) => ({
+      type: item.type as string,
+      title: item.title as string,
+      created_at: String(item.created_at),
+    }));
+
+  return (
+    <AdminDashboardClient
+      workerCount={workerCount[0]?.count ?? 0}
+      pendingVerifCount={pendingVerifCount[0]?.count ?? 0}
+      activeContractCount={activeContractCount[0]?.count ?? 0}
+      completedJobsMonthly={completedJobsMonthly[0]?.count ?? 0}
+      revenueDisplay={revenueDisplay}
+      disputeCount={disputeCount[0]?.count ?? 0}
+      activityFeed={activityFeed}
+      unverifiedWorkers={pendingWorkers as any[]}
+      verificationCapabilities={verificationCapabilities}
+    />
+  );
+}

@@ -1,0 +1,332 @@
+import { getNeonSessionFromCookies } from "@/lib/auth/session-cookie";
+import { isAuthSessionUnavailableError } from "@/lib/auth/session-cookie";
+import { ADMIN_SESSION_COOKIE, verifyAdminSessionCookieValue } from "@/lib/admin-session";
+import { NextResponse, NextRequest } from "next/server";
+import { sql } from "@/lib/db";
+
+function getAllowedOrigins(req: NextRequest) {
+  const configured = (process.env.CORS_ALLOWED_ORIGINS || "")
+    .split(",")
+    .map((value) => value.trim())
+    .filter(Boolean);
+
+  const envOrigins = [process.env.NEXT_PUBLIC_APP_URL, process.env.BASE_URL]
+    .filter(Boolean)
+    .map((value) => String(value).trim());
+
+  return new Set([...configured, ...envOrigins, req.nextUrl.origin]);
+}
+
+function applyCorsHeaders(req: NextRequest, res: NextResponse) {
+  const origin = req.headers.get("origin");
+  if (!origin) return res;
+
+  const allowedOrigins = getAllowedOrigins(req);
+  if (!allowedOrigins.has(origin)) return res;
+
+  res.headers.set("Access-Control-Allow-Origin", origin);
+  res.headers.set("Access-Control-Allow-Credentials", "true");
+  res.headers.set("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+  res.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With");
+  res.headers.set("Vary", "Origin");
+  return res;
+}
+
+function createPageSecurity(req: NextRequest) {
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const isDev = process.env.NODE_ENV === "development";
+  const contentSecurityPolicy = isDev
+    ? [
+        "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob:",
+        "script-src 'self' 'unsafe-eval' 'unsafe-inline' data: blob: https:",
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "img-src 'self' data: blob: https:",
+        "font-src 'self' data: https://fonts.gstatic.com",
+        "connect-src 'self' https: http: ws: wss:",
+        "media-src 'self' https:",
+        "frame-src 'self' blob:",
+      ].join("; ")
+    : [
+        "default-src 'self'",
+        `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'`,
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+        "img-src 'self' data: blob: https:",
+        "font-src 'self' data: https://fonts.gstatic.com",
+        "connect-src 'self' https:",
+        "media-src 'self' https:",
+        "frame-src 'self' blob:",
+        "frame-ancestors 'none'",
+        "object-src 'none'",
+        "base-uri 'self'",
+        "form-action 'self'",
+      ].join("; ");
+
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", contentSecurityPolicy);
+
+  return {
+    next() {
+      const response = NextResponse.next({ request: { headers: requestHeaders } });
+      response.headers.set("Content-Security-Policy", contentSecurityPolicy);
+      return response;
+    },
+    apply(response: NextResponse) {
+      response.headers.set("Content-Security-Policy", contentSecurityPolicy);
+      return response;
+    },
+  };
+}
+
+const PROTECTED_API_PREFIXES = [
+  "/api/admin",
+  "/api/auth/profile",
+  "/api/clients",
+  "/api/contracts",
+  "/api/conversations",
+  "/api/create-subaccount",
+  "/api/initialize-payment",
+  "/api/jobs",
+  "/api/location",
+  "/api/notifications",
+  "/api/payments",
+  "/api/ratings",
+  "/api/upload",
+  "/api/workers",
+];
+
+async function getAccountState(userId?: string | null) {
+  if (!userId) return null;
+  try {
+    const rows = await sql`
+      SELECT role, email, is_suspended, admin_role, admin_status, admin_activation_required
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    if (!/admin_role|admin_status|admin_activation_required/i.test(message)) throw error;
+    const rows = await sql`
+      SELECT role, email, is_suspended
+      FROM users
+      WHERE id = ${userId}
+      LIMIT 1
+    `;
+    return rows[0] ?? null;
+  }
+}
+
+function isActiveAdminAccount(accountState: any) {
+  if (!accountState) return false;
+  return accountState.admin_status === "active" && !accountState.admin_activation_required;
+}
+
+function isActivationRequiredAdminAccount(accountState: any) {
+  if (!accountState) return false;
+  return accountState.admin_activation_required || accountState.admin_status === "activation_required";
+}
+
+async function getAdminEmployeeState(req: NextRequest) {
+  const session = await verifyAdminSessionCookieValue(req.cookies.get(ADMIN_SESSION_COOKIE)?.value);
+  if (!session?.adminId) return null;
+  const rows = await sql`
+    SELECT id, admin_employee_id, admin_role, admin_status, admin_activation_required, session_version
+    FROM admin_employees
+    WHERE id = ${session.adminId}
+    LIMIT 1
+  `;
+  const account = rows[0] ?? null;
+  if (!account) return null;
+  if (Number(account.session_version || 0) !== Number(session.sessionVersion || 0)) return null;
+  return account;
+}
+
+function suspendedLoginUrl(req: NextRequest) {
+  const url = new URL("/login", req.url);
+  url.searchParams.set("error", "suspended");
+  return url;
+}
+
+export default async function proxy(req: NextRequest) {
+  const { pathname } = req.nextUrl;
+  if (pathname.startsWith("/_next/") || pathname === "/favicon.ico") {
+    return NextResponse.next();
+  }
+  const isApiRoute = pathname.startsWith("/api/");
+
+  if (isApiRoute) {
+    if (req.method === "OPTIONS") {
+      return applyCorsHeaders(req, new NextResponse(null, { status: 204 }));
+    }
+
+    const isProtectedApiRoute = PROTECTED_API_PREFIXES.some((prefix) => pathname.startsWith(prefix));
+    if (isProtectedApiRoute) {
+      try {
+        const isActivationApi = pathname.startsWith("/api/admin/activation");
+        const isAdminSignOutApi = pathname === "/api/admin/sign-out";
+        if (pathname.startsWith("/api/admin")) {
+          const adminState = await getAdminEmployeeState(req);
+          if (isAdminSignOutApi) {
+            return applyCorsHeaders(req, NextResponse.next());
+          }
+          if (isActivationApi && !isActivationRequiredAdminAccount(adminState)) {
+            return applyCorsHeaders(req, NextResponse.json({ error: "Activation-required administrator access is required." }, { status: 403 }));
+          }
+          if (!isActivationApi && !isActiveAdminAccount(adminState)) {
+            return applyCorsHeaders(
+              req,
+              NextResponse.json({ error: "Active administrator access is required." }, { status: 403 }),
+            );
+          }
+        }
+      } catch (apiError) {
+        if (isAuthSessionUnavailableError(apiError)) {
+          return applyCorsHeaders(
+            req,
+            NextResponse.json(
+              { error: "Authentication service temporarily unavailable. Please refresh and try again." },
+              { status: 503 },
+            ),
+          );
+        }
+        console.error("[PROXY_API_ACCOUNT_STATE_ERROR]", apiError instanceof Error ? apiError.name : "UnknownError");
+        return applyCorsHeaders(
+          req,
+          NextResponse.json(
+            { error: "Unable to verify account status. Please refresh and try again." },
+            { status: 503 },
+          ),
+        );
+      }
+    }
+
+    return applyCorsHeaders(req, NextResponse.next());
+  }
+
+  const pageSecurity = createPageSecurity(req);
+
+  try {
+    const session = await getNeonSessionFromCookies(req.cookies);
+    const isLoggedIn = !!session?.user;
+    const user = session?.user as any;
+
+    const isAuthPage = pathname === "/login" || pathname.startsWith("/register") || pathname === "/otp-verification";
+    const isAdminLoginPage = pathname === "/admin/login";
+    const isClientArea = pathname.startsWith("/client");
+    const isWorkerArea = pathname.startsWith("/worker");
+    const isAdminArea = pathname.startsWith("/admin");
+    const isSharedProtectedArea = pathname.startsWith("/contracts/");
+    const isProtectedPage = isClientArea || isWorkerArea || isAdminArea || isSharedProtectedArea;
+
+    const isLogout = isAuthPage && (req.nextUrl.searchParams.get("logout") === "1" || req.nextUrl.searchParams.has("logout"));
+    if (isLogout) {
+      const res = pageSecurity.next();
+      const authCookieNames = [
+        "__Secure-neon-auth.session_token",
+        "neon-auth.session_token",
+        "neon-auth.local.session_data",
+        "__Secure-neon-auth.session_data",
+        "neon-auth.session_data",
+        "neon-auth.session_challenge",
+        "__Secure-neon-auth.session_challenge",
+        "better-auth.session_token",
+        "__Secure-better-auth.session_token",
+        "better-auth.session_data",
+        "__Secure-better-auth.session_data",
+        "better-auth.dont_remember",
+      ];
+      for (const cookie of req.cookies.getAll()) {
+        const n = cookie.name;
+        if ((n.includes("neon-auth") || n.includes("better-auth") || n.includes("session")) && !n.includes("admin")) {
+          authCookieNames.push(n);
+        }
+      }
+      for (const name of Array.from(new Set(authCookieNames))) {
+        res.cookies.set(name, "", {
+          maxAge: 0,
+          expires: new Date(0),
+          path: "/",
+          secure: true,
+        });
+        res.headers.append(
+          "Set-Cookie",
+          `${name}=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0; SameSite=Lax`
+        );
+      }
+      return res;
+    }
+
+    if (isAdminArea) {
+      const adminState = await getAdminEmployeeState(req);
+      const isAdminLogout = isAdminLoginPage && (req.nextUrl.searchParams.get("logout") === "1" || req.nextUrl.searchParams.has("logout"));
+      if (isAdminLogout) {
+        return pageSecurity.next();
+      }
+      if (isAdminLoginPage && isActiveAdminAccount(adminState)) {
+        return pageSecurity.apply(NextResponse.redirect(new URL("/admin/dashboard", req.url)));
+      }
+      if (isAdminLoginPage && isActivationRequiredAdminAccount(adminState)) {
+        return pageSecurity.apply(NextResponse.redirect(new URL("/admin/activate", req.url)));
+      }
+      if (!isAdminLoginPage && isActivationRequiredAdminAccount(adminState)) {
+        if (pathname !== "/admin/activate") return pageSecurity.apply(NextResponse.redirect(new URL("/admin/activate", req.url)));
+      } else if (!isAdminLoginPage && pathname !== "/admin/activate" && !isActiveAdminAccount(adminState)) {
+        return pageSecurity.apply(NextResponse.redirect(new URL("/admin/login", req.url)));
+      } else if (pathname === "/admin/activate" && isActiveAdminAccount(adminState)) {
+        return pageSecurity.apply(NextResponse.redirect(new URL("/admin/dashboard", req.url)));
+      }
+      return pageSecurity.next();
+    }
+
+    if (!isLoggedIn && (isClientArea || isWorkerArea)) {
+      return pageSecurity.apply(NextResponse.redirect(new URL("/login", req.url)));
+    }
+
+    if (!isLoggedIn && isSharedProtectedArea) {
+      return pageSecurity.apply(NextResponse.redirect(new URL("/login", req.url)));
+    }
+
+    let accountState = null;
+    if (isLoggedIn) {
+      accountState = await getAccountState(user.id);
+      if (accountState?.is_suspended && isProtectedPage) {
+        return pageSecurity.apply(NextResponse.redirect(suspendedLoginUrl(req)));
+      }
+    }
+
+    // Signup and login can establish a session before email verification.
+    // Keep unverified users on the OTP screen instead of sending them into
+    const isUnverifiedOtpFlow =
+      pathname === "/otp-verification" &&
+      (!user?.emailVerified || req.nextUrl.searchParams.has("email") || req.nextUrl.searchParams.has("phone"));
+    if (isLoggedIn && isAuthPage && !isLogout && !isUnverifiedOtpFlow) {
+      const dbRole = accountState?.role;
+      if (accountState?.is_suspended) return pageSecurity.next();
+      if (dbRole === "client") return pageSecurity.apply(NextResponse.redirect(new URL("/client/search", req.url)));
+      if (dbRole === "worker") return pageSecurity.apply(NextResponse.redirect(new URL("/worker/dashboard", req.url)));
+    }
+
+    return pageSecurity.next();
+  } catch (error) {
+    console.error("[PROXY_ERROR]", error instanceof Error ? error.name : "UnknownError");
+    if (pathname.startsWith("/client") || pathname.startsWith("/worker") || pathname.startsWith("/admin")) {
+      if (isAuthSessionUnavailableError(error)) {
+        return pageSecurity.apply(new NextResponse("Authentication service temporarily unavailable. Please refresh and try again.", {
+          status: 503,
+        }));
+      }
+      return pageSecurity.apply(new NextResponse("Unable to verify access. Please refresh and try again.", {
+        status: 503,
+      }));
+    }
+    return pageSecurity.next();
+  }
+}
+
+export const config = {
+  matcher: [
+    "/((?!_next/static|_next/image|_next/hmr|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+  ],
+};

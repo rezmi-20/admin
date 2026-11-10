@@ -1,0 +1,81 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
+const root = process.cwd();
+const read = (file) => readFileSync(resolve(root, file), "utf8");
+
+const pkg = JSON.parse(read("package.json"));
+const migration = read("drizzle/0018_verification_operations.sql");
+const schema = read("lib/schema.ts");
+const ops = read("lib/verification-operations.ts");
+const adminActions = read("lib/actions/admin.ts");
+const profileActions = read("lib/actions/profile.ts");
+const registerRoute = read("app/api/auth/profile/route.ts");
+const queuePage = read("app/(admin)/admin/verify/page.tsx");
+const queueTabs = read("components/admin/VerificationReviewTabs.tsx");
+const workerPage = read("app/(admin)/admin/verify/[id]/page.tsx");
+const workerContent = read("components/WorkerVerificationContent.tsx");
+const clientPage = read("app/(admin)/admin/clients/[id]/verify/page.tsx");
+const finReveal = read("components/admin/VerificationFinReveal.tsx");
+const documentViewer = read("components/admin/ProtectedVerificationDocumentViewer.tsx");
+const revealRoute = read("app/api/admin/verification/[accountType]/[accountUserId]/reveal-fin/route.ts");
+const workerDoc = read("app/api/workers/[id]/verification-document/route.ts");
+const clientDoc = read("app/api/clients/[clientId]/verification-document/route.ts");
+const nextConfig = read("next.config.js");
+const workerApi = read("app/api/workers/verify/route.ts");
+const clientApi = read("app/api/clients/verify/route.ts");
+const community = read("lib/actions/community.ts");
+const communityPage = read("app/(admin)/admin/community/page.tsx");
+const communityClient = read("components/admin/CommunityModerationClient.tsx");
+const smoke = read("tests/browser/smoke.spec.ts");
+
+let failed = false;
+function check(label, ok) {
+  console.log(`${ok ? "PASS" : "MISSING"} ${label}`);
+  if (!ok) failed = true;
+}
+
+check("npm script wired", pkg.scripts?.["check:verification-operations"] === "node scripts/check-verification-operations.mjs");
+check("migration creates attempts and events", migration.includes("CREATE TABLE IF NOT EXISTS verification_attempts") && migration.includes("CREATE TABLE IF NOT EXISTS verification_events"));
+check("events are append-only", migration.includes("verification_events_no_update") && migration.includes("verification_events_no_delete"));
+check("attempts have one current index", migration.includes("verification_attempts_current_unique_idx") && migration.includes("WHERE is_current = true"));
+check("schema exports attempt and event tables", schema.includes("verificationAttempts") && schema.includes("verificationEvents"));
+check("decision path requires exact permissions", ops.includes("verification.approve") && ops.includes("verification.reject") && ops.includes("verification.request_resubmission") && ops.includes("verification.revoke"));
+check("only content verification admin can decide", ops.includes("Only content and verification administrators may make verification decisions") && ops.includes("canActOnVerification"));
+check("self review denied", ops.includes("Administrators cannot review their own verification case"));
+check("stale attempt denied", ops.includes("This verification attempt is stale") && ops.includes("expectedAttemptId"));
+check("duplicate/concurrent decision denied", ops.includes("already been decided") && ops.includes("changed while you were reviewing"));
+check("FIN and document required before approval only", ops.includes('nextStatus === "approved"') && ops.includes("Current FIN metadata and verification document are required before approval."));
+check("controlled FIN reveal server action exists", ops.includes("revealVerificationFin") && ops.includes("decryptFin") && ops.includes("verification_fin_revealed"));
+check("FIN reveal limited to content verification admin", ops.includes('"content_verification_admin"') && ops.includes('"verification.review"') && ops.includes("Only content verification administrators may reveal FIN"));
+check("FIN reveal denies stale attempts and self review", ops.includes("This verification attempt is stale") && ops.includes("Administrators cannot review their own verification case"));
+check("FIN reveal audit omits FIN secret material", ops.includes("auditVerificationFinReveal") && !ops.includes("finEncrypted: input") && !ops.includes("finFingerprint") && !ops.includes("ciphertext"));
+check("FIN reveal route is no-store", revealRoute.includes("revealVerificationFin") && revealRoute.includes("private, no-store") && revealRoute.includes("Pragma"));
+check("FIN reveal UI is explicit and temporary", finReveal.includes("Reveal FIN for verification") && finReveal.includes("Sensitive identity data") && finReveal.includes("setTimeout") && finReveal.includes("setRevealedFin(null)"));
+check("FIN reveal UI avoids persistent storage and console output", !finReveal.includes("localStorage") && !finReveal.includes("sessionStorage") && !finReveal.includes("console."));
+check("history omits full FIN and raw document data", migration.includes("document_fingerprint") && !migration.includes("fin_encrypted") && !migration.includes("fayda_doc_url"));
+check("submission attempts recorded for profile and registration", profileActions.includes("recordVerificationSubmission") && registerRoute.includes("recordVerificationSubmission"));
+check("admin actions delegate to guarded operations", adminActions.includes("decideVerificationCase") && adminActions.includes("expectedAttemptId"));
+check("queue has complete worker and client filters", queueTabs.includes("admin.verification.queue.pending") && queueTabs.includes("admin.verification.queue.approved") && queueTabs.includes("admin.verification.queue.revoked") && queueTabs.includes("admin.verification.queue.resubmitted"));
+check("revocation is approved-only and separately audited", ops.includes("Only currently approved verification cases can be revoked.") && ops.includes("reviewerEmployeeId"));
+check("submission attempt writer avoids duplicate current attempts", ops.includes("pg_advisory_xact_lock") && ops.includes("status <> 'pending'") && ops.includes("NOT EXISTS"));
+check("queue displays masked FIN and no raw document URL", queuePage.includes("maskFinLast4") && !queueTabs.includes("fayda_doc_url"));
+check("worker review uses protected document route", workerContent.includes("/api/workers/${worker.user_id}/verification-document") && !workerContent.includes("src={worker.fayda_doc_url}"));
+check("client review uses protected document route", clientPage.includes("/api/clients/${client.user_id}/verification-document"));
+check("review pages use blob protected document viewer", workerContent.includes("ProtectedVerificationDocumentViewer") && clientPage.includes("ProtectedVerificationDocumentViewer") && documentViewer.includes("URL.createObjectURL"));
+check("protected document viewer uses relative same-origin fetch", documentViewer.includes('credentials: "same-origin"') && documentViewer.includes('cache: "no-store"') && !documentViewer.includes("localhost"));
+check("protected document viewer handles image and PDF", documentViewer.includes('contentType.startsWith("image/")') && documentViewer.includes("contentType.includes(\"pdf\")") && documentViewer.includes("Open securely in new tab"));
+check("protected document viewer has controlled errors", documentViewer.includes("Document unavailable") && documentViewer.includes("Access denied") && documentViewer.includes("Unsupported document type"));
+check("review pages show timeline", workerContent.includes("Case Timeline") && clientPage.includes("Timeline and History"));
+check("Fayda document routes require verification admin review permission and POST", workerDoc.includes("getAdminPrincipal") && workerDoc.includes('admin.role !== "content_verification_admin"') && workerDoc.includes('hasAdminPermission(admin, "verification.review")') && workerDoc.includes("export async function POST") && clientDoc.includes("getAdminPrincipal") && clientDoc.includes('admin.role !== "content_verification_admin"') && clientDoc.includes('hasAdminPermission(admin, "verification.review")') && clientDoc.includes("export async function POST"));
+check("document routes send no-store and same-origin viewer headers", workerDoc.includes("private, no-store") && workerDoc.includes("frame-ancestors 'self'") && workerDoc.includes("SAMEORIGIN") && clientDoc.includes("private, no-store") && clientDoc.includes("frame-ancestors 'self'") && clientDoc.includes("SAMEORIGIN"));
+check("Fayda reveal is one-time and limited to a pending current attempt", workerDoc.includes("recordVerificationDocumentView") && clientDoc.includes("recordVerificationDocumentView") && workerDoc.includes("expectedAttemptId") && clientDoc.includes("expectedAttemptId") && ops.includes("one-time Fayda document reveal") && ops.includes("is_current = true") && ops.includes("NOT EXISTS"));
+check("Fayda documents are encrypted at rest and existing rows have a backfill", read("lib/fin-protection.ts").includes("fayda-document:enc:v1:") && read("lib/fin-protection.ts").includes('createCipheriv("aes-256-gcm"') && read("scripts/migrate-fayda-document-protection.mjs").includes("UPDATE ${table} SET fayda_doc_url = $1"));
+check("global headers permit blob PDF viewer and override document XFO", nextConfig.includes("frame-src 'self' blob:") && nextConfig.includes("/api/:path*/verification-document") && nextConfig.includes("SAMEORIGIN"));
+check("decision APIs return conflict status", workerApi.includes("statusCode") && workerApi.includes("result.status") && clientApi.includes("statusCode") && clientApi.includes("result.status"));
+check("content moderation requires permission and reason", community.includes('requireAdminPermission("content.moderate")') && community.includes("A moderation reason is required"));
+check("content moderation history exists", migration.includes("content_moderation_events") && community.includes("INSERT INTO content_moderation_events"));
+check("content moderation UI hides controls without permission", communityPage.includes("canModerate") && communityClient.includes("Read only"));
+check("browser coverage added", smoke.includes("super admin verification oversight stays read-only") && smoke.includes("/admin/verify"));
+
+process.exit(failed ? 1 : 0);
