@@ -502,26 +502,27 @@ function CreateAdminDrawer({
 
 // ─── ROLE BADGES ──────────────────────────────────────────────────────────────
 function RoleBadge({ role }: { role: UserRole }) {
+  const { t } = useLanguage();
   if (role === "admin") {
     return (
-      <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border border-purple-200/60 dark:border-purple-800/40">
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
         <Crown className="w-3 h-3" />
-        Admin
+        {t("admin.users.filter.admins")}
       </span>
     );
   }
   if (role === "worker") {
     return (
-      <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border border-blue-200/60 dark:border-blue-800/40">
+      <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
         <UserCog className="w-3 h-3" />
-        Worker
+        {t("admin.users.filter.workers")}
       </span>
     );
   }
   return (
-    <span className="inline-flex items-center gap-1 text-[10.5px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/40">
+    <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
       <User className="w-3 h-3" />
-      Client
+      {t("admin.users.filter.clients")}
     </span>
   );
 }
@@ -668,141 +669,152 @@ export function SuperAdminUsersClient({ initialUsers }: Props) {
       )}
 
       {/* ════════════════════════════════════════════════════════════════════
-          SEAMLESS PAGE LAYOUT (NO OVER-CONTAINERIZATION!)
+          CLEAN PAGE LAYOUT (STRICTLY FOLLOWING deals.tsx & customers.tsx)
          ════════════════════════════════════════════════════════════════════ */}
-      <div className="w-full space-y-4 font-['Inter',system-ui,sans-serif]">
-        {/* ── 1. Flush Page Header (No Artificial Box Container!) ── */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+      <div className="w-full space-y-6 pb-24">
+        {/* ── 1. Flush Page Header (Clean deals.tsx style: No dots, no uppercase pill badges) ── */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <div className="flex items-center gap-2 mb-1">
-              <span className="w-2 h-2 rounded-full bg-blue-500 shrink-0" />
-              <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-                Staff Governance & Access
-              </span>
-            </div>
-            <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight text-slate-900 dark:text-white">
-              User Management
+            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+              {t("admin.users.title")}
             </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Full visibility and control over all platform accounts — clients, workers, and administrators.
+            <p className="text-sm text-muted-foreground mt-1">
+              {t("admin.users.desc")}
             </p>
           </div>
 
           <button
             onClick={() => setShowCreateDrawer(true)}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-lg shadow-sm transition active:scale-95 shrink-0"
+            className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-accent hover:bg-accent/90 text-accent-foreground text-xs font-bold rounded-lg shadow-xs transition active:scale-95 shrink-0 cursor-pointer"
           >
             <Plus className="w-4 h-4" />
-            <span>Create Admin Account</span>
+            <span>{t("admin.users.createAdmin")}</span>
           </button>
         </div>
 
-        {/* ── 2. The Unified Data Grid Card (Integrated Toolbar + Table) ── */}
-        <div className="rounded-[12px] bg-white dark:bg-[#111827] border border-[#EEF0F2] dark:border-slate-800/80 shadow-[0_1px_3px_rgba(0,0,0,0.02)] overflow-hidden">
-          {/* Integrated Toolbar: Role Segmented Pills + Inline Search */}
-          <div className="p-3 sm:p-4 border-b border-slate-100 dark:border-slate-800 flex flex-col md:flex-row md:items-center justify-between gap-3">
-            {/* Segmented Role Filter Pills */}
-            <div className="flex items-center bg-[#F3F4F6] dark:bg-slate-800/80 p-0.5 rounded-lg text-xs font-medium text-slate-500 dark:text-slate-400 shrink-0 overflow-x-auto no-scrollbar">
-              <button
-                onClick={() => setTab("all")}
-                className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
-                  tab === "all"
-                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-bold shadow-xs"
-                    : "hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                <span>All Users</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200/60 dark:bg-slate-600/60 font-semibold">
-                  {counts.all}
-                </span>
-              </button>
-
-              <button
-                onClick={() => setTab("client")}
-                className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
-                  tab === "client"
-                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-bold shadow-xs"
-                    : "hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                <span>Clients</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 font-semibold">
-                  {counts.client}
-                </span>
-              </button>
-
-              <button
-                onClick={() => setTab("worker")}
-                className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
-                  tab === "worker"
-                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-bold shadow-xs"
-                    : "hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                <span>Workers</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-blue-100 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-semibold">
-                  {counts.worker}
-                </span>
-              </button>
-
-              <button
-                onClick={() => setTab("admin")}
-                className={`px-3 py-1.5 rounded-md transition-all flex items-center gap-1.5 ${
-                  tab === "admin"
-                    ? "bg-white dark:bg-slate-700 text-slate-900 dark:text-white font-bold shadow-xs"
-                    : "hover:text-slate-900 dark:hover:text-white"
-                }`}
-              >
-                <span>Admins</span>
-                <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-purple-100 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 font-semibold">
-                  {counts.admin}
-                </span>
-              </button>
+        {/* ── 2. KPI Summary Cards (customers.tsx & deals.tsx pattern) ── */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">{t("admin.users.kpi.total")}</p>
+                <p className="text-2xl font-bold tracking-tight text-foreground font-mono mt-1">{counts.all}</p>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center text-muted-foreground">
+                <Users className="w-4 h-4" />
+              </div>
             </div>
+          </div>
 
-            {/* Inline Search Input */}
-            <div className="relative w-full md:w-80">
-              <Search className="absolute left-3 top-2.5 w-3.5 h-3.5 text-slate-400" />
+          <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">{t("admin.users.kpi.clients")}</p>
+                <p className="text-2xl font-bold tracking-tight text-emerald-600 dark:text-emerald-400 font-mono mt-1">{counts.client}</p>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+                <User className="w-4 h-4" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">{t("admin.users.kpi.workers")}</p>
+                <p className="text-2xl font-bold tracking-tight text-blue-600 dark:text-blue-400 font-mono mt-1">{counts.worker}</p>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-400">
+                <UserCog className="w-4 h-4" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-border bg-card p-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-muted-foreground">{t("admin.users.kpi.admins")}</p>
+                <p className="text-2xl font-bold tracking-tight text-purple-600 dark:text-purple-400 font-mono mt-1">{counts.admin}</p>
+              </div>
+              <div className="w-9 h-9 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-400">
+                <Crown className="w-4 h-4" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 3. Floating Search & Filters (OUTSIDE table container - strictly matching deals.tsx) ── */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
               <input
                 type="text"
-                placeholder="Search by name, email, phone, ID..."
+                placeholder={t("admin.users.searchPlaceholder")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className="w-full bg-[#F3F4F6] dark:bg-slate-800/80 pl-8.5 pr-8 py-1.5 rounded-lg text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 border-none focus:outline-hidden focus:ring-1 focus:ring-blue-500 transition"
+                className="w-72 h-9 pl-9 pr-8 rounded-lg bg-secondary border border-border text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring/20 focus:border-accent transition-all duration-200"
               />
               {search && (
                 <button
                   type="button"
                   onClick={() => setSearch("")}
-                  className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
-          </div>
 
-          {/* Table View */}
+            <div className="flex items-center gap-2">
+              {[
+                { id: "all", label: t("admin.users.filter.all"), count: counts.all },
+                { id: "client", label: t("admin.users.filter.clients"), count: counts.client },
+                { id: "worker", label: t("admin.users.filter.workers"), count: counts.worker },
+                { id: "admin", label: t("admin.users.filter.admins"), count: counts.admin },
+              ].map((filterTab) => {
+                const isSelected = tab === filterTab.id;
+                return (
+                  <button
+                    key={filterTab.id}
+                    onClick={() => setTab(filterTab.id as any)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all duration-200 flex items-center gap-1.5 cursor-pointer ${
+                      isSelected
+                        ? "bg-accent text-accent-foreground font-semibold"
+                        : "bg-secondary text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <span>{filterTab.label}</span>
+                    <span className="text-[10px] opacity-75 font-mono">({filterTab.count})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* ── 4. Standalone Table Card (Clean Isolated Container) ── */}
+        <div className="bg-card border border-border rounded-xl overflow-hidden animate-in fade-in slide-in-from-bottom-4 duration-500 shadow-xs">
           {filtered.length === 0 ? (
             <div className="py-16 text-center">
-              <Users className="w-10 h-10 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-              <p className="text-xs font-semibold text-slate-500">
-                No users found matching your search criteria.
+              <Users className="w-10 h-10 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-xs font-semibold text-foreground">
+                {t("admin.users.noUsers")}
               </p>
             </div>
           ) : (
             <div className="overflow-x-auto no-scrollbar">
               <table className="w-full text-xs text-left">
                 <thead>
-                  <tr className="border-b border-slate-100 dark:border-slate-800/80 bg-slate-50/60 dark:bg-slate-800/40 text-slate-400 font-bold uppercase tracking-wider text-[9.5px]">
-                    <th className="px-4 py-3">Name / Contact</th>
-                    <th className="px-4 py-3">Role</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Joined Date</th>
-                    <th className="px-4 py-3 text-right">Actions</th>
+                  <tr className="border-b border-border bg-secondary/50 text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    <th className="px-4 py-3">{t("admin.users.table.user")}</th>
+                    <th className="px-4 py-3">{t("admin.users.table.role")}</th>
+                    <th className="px-4 py-3">{t("admin.users.table.status")}</th>
+                    <th className="px-4 py-3">{t("admin.users.table.joined")}</th>
+                    <th className="px-4 py-3 text-right">{t("admin.users.table.actions")}</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+                <tbody className="divide-y divide-border">
                   {filtered.map((u) => {
                     const initials = (u.fullName ?? u.email).substring(0, 2).toUpperCase();
                     const isSuspended = u.isSuspended;
@@ -811,28 +823,28 @@ export function SuperAdminUsersClient({ initialUsers }: Props) {
                     return (
                       <tr
                         key={u.id}
-                        className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors"
+                        className="hover:bg-secondary/30 transition-colors"
                       >
                         {/* Name / Contact */}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2.5">
-                            <div className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-[11px] flex items-center justify-center shrink-0 border border-slate-200/60 dark:border-slate-700">
+                            <div className="w-8 h-8 rounded-full bg-secondary text-foreground font-bold text-xs flex items-center justify-center shrink-0 border border-border">
                               {initials}
                             </div>
                             <div className="min-w-0">
-                              <p className="font-bold text-slate-900 dark:text-white truncate leading-tight">
-                                {u.fullName || <span className="text-slate-400 italic">No name</span>}
+                              <p className="font-semibold text-foreground truncate leading-tight">
+                                {u.fullName || <span className="text-muted-foreground italic">No name</span>}
                               </p>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                              <p className="text-[11px] text-muted-foreground truncate">
                                 {u.email}
                               </p>
                               {u.phone && (
-                                <p className="text-[10px] text-slate-400">
+                                <p className="text-[10px] text-muted-foreground font-mono">
                                   {u.phone}
                                 </p>
                               )}
                               {u.role === "admin" && (
-                                <p className="text-[9.5px] font-semibold text-purple-600 dark:text-purple-400 mt-0.5">
+                                <p className="text-[10px] font-semibold text-purple-600 dark:text-purple-400 mt-0.5">
                                   {u.adminEmployeeId || "Pending ID"} • {u.adminRole?.replaceAll("_", " ")}
                                 </p>
                               )}
@@ -849,12 +861,12 @@ export function SuperAdminUsersClient({ initialUsers }: Props) {
                         <td className="px-4 py-3">
                           <div className="space-y-1">
                             <span
-                              className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded-full ${
+                              className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2.5 py-0.5 rounded-full border ${
                                 isSuspended
-                                  ? "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300"
+                                  ? "bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20"
                                   : isActivationReq
-                                  ? "bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300"
-                                  : "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300"
+                                  ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20"
+                                  : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
                               }`}
                             >
                               <span
@@ -867,14 +879,14 @@ export function SuperAdminUsersClient({ initialUsers }: Props) {
                                 }`}
                               />
                               {isSuspended
-                                ? "Suspended"
+                                ? t("admin.users.status.suspended")
                                 : isActivationReq
-                                ? "Activation Req."
-                                : "Active"}
+                                ? t("admin.users.status.pending")
+                                : t("admin.users.status.active")}
                             </span>
 
                             {u.role === "worker" && (
-                              <p className="text-[9.5px] text-slate-400">
+                              <p className="text-[10px] text-muted-foreground">
                                 {u.workerIsVerified ? "✓ Verified Worker" : "• Pending Verification"}
                               </p>
                             )}
@@ -882,7 +894,7 @@ export function SuperAdminUsersClient({ initialUsers }: Props) {
                         </td>
 
                         {/* Joined Date */}
-                        <td className="px-4 py-3 text-slate-500 dark:text-slate-400 text-[11px]">
+                        <td className="px-4 py-3 text-muted-foreground font-mono text-[11px]">
                           <span>
                             {new Date(u.createdAt).toLocaleDateString(undefined, {
                               year: "numeric",
@@ -891,7 +903,7 @@ export function SuperAdminUsersClient({ initialUsers }: Props) {
                             })}
                           </span>
                           {u.role === "admin" && u.adminCreatedByEmail && (
-                            <p className="text-[9.5px] text-slate-400 truncate">
+                            <p className="text-[10px] text-muted-foreground truncate">
                               by {u.adminCreatedByEmail}
                             </p>
                           )}
@@ -904,20 +916,20 @@ export function SuperAdminUsersClient({ initialUsers }: Props) {
                             <button
                               disabled={isPending}
                               onClick={() => handleSuspend(u.id, u.isSuspended)}
-                              className={`text-[10.5px] px-2 py-1 rounded font-semibold border transition ${
+                              className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold border transition cursor-pointer ${
                                 u.isSuspended
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100"
-                                  : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                                  ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/20"
+                                  : "bg-secondary text-muted-foreground border-border hover:text-foreground"
                               }`}
                             >
-                              {u.isSuspended ? "Unsuspend" : "Suspend"}
+                              {u.isSuspended ? t("admin.users.action.reactivate") : t("admin.users.action.suspend")}
                             </button>
 
                             {/* Client Fayda link */}
                             {u.role === "client" && (
                               <Link
                                 href={`/admin/clients/${u.id}/verify`}
-                                className="text-[10.5px] px-2 py-1 rounded font-semibold border bg-sky-50 text-sky-700 border-sky-200 hover:bg-sky-100 transition"
+                                className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/30 hover:bg-sky-500/20 transition"
                               >
                                 Review Fayda
                               </Link>
@@ -928,9 +940,9 @@ export function SuperAdminUsersClient({ initialUsers }: Props) {
                               <button
                                 disabled={isPending}
                                 onClick={() => handleResetPassword(u.id)}
-                                className="text-[10.5px] px-2 py-1 rounded font-semibold border bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100 transition"
+                                className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/30 hover:bg-indigo-500/20 transition cursor-pointer"
                               >
-                                Reset Password
+                                {t("admin.users.action.resetPassword")}
                               </button>
                             )}
 
@@ -938,9 +950,9 @@ export function SuperAdminUsersClient({ initialUsers }: Props) {
                             <button
                               disabled={isPending}
                               onClick={() => setConfirmDelete(u.id)}
-                              className="text-[10.5px] px-2 py-1 rounded font-semibold border bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 transition"
+                              className="text-[11px] px-2.5 py-1 rounded-lg font-semibold border bg-destructive/10 text-destructive border-destructive/20 hover:bg-destructive/20 transition cursor-pointer"
                             >
-                              Delete
+                              {t("admin.users.action.delete")}
                             </button>
                           </div>
                         </td>
@@ -953,14 +965,14 @@ export function SuperAdminUsersClient({ initialUsers }: Props) {
           )}
 
           {/* Table Footer */}
-          <div className="px-4 py-2.5 border-t border-slate-100 dark:border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+          <div className="px-4 py-3 border-t border-border bg-secondary/20 text-[11px] text-muted-foreground flex items-center justify-between">
             <span>
               Showing {filtered.length} of {users.length} accounts
             </span>
             {search && (
               <button
                 onClick={() => setSearch("")}
-                className="text-blue-600 dark:text-blue-400 hover:underline font-semibold"
+                className="text-accent hover:underline font-semibold cursor-pointer"
               >
                 Clear filter
               </button>

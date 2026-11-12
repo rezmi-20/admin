@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Image as ImageIcon, ShieldCheck, X, Camera } from "lucide-react";
 import { reviewWorkerAvatarChange } from "@/lib/actions/worker-avatar";
+import { useLanguage } from "@/context/LanguageContext";
 import FadeContent from "@/components/ui/fade-content";
 
 type AvatarRequest = {
@@ -17,6 +18,7 @@ type AvatarRequest = {
 };
 
 export function WorkerAvatarRequestsClient({ requests: initialRequests, canReview }: { requests: AvatarRequest[]; canReview: boolean }) {
+  const { t } = useLanguage();
   const [requests, setRequests] = useState(initialRequests);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [pendingId, setPendingId] = useState<string | null>(null);
@@ -39,70 +41,63 @@ export function WorkerAvatarRequestsClient({ requests: initialRequests, canRevie
   };
 
   return (
-    <FadeContent blur duration={0.3} className="space-y-4 max-w-5xl mx-auto w-full">
-      {/* Vento Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 sm:p-5 rounded-[14px] bg-white dark:bg-[#141E30] border border-black/[0.05] dark:border-white/[0.06] shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
+    <div className="space-y-6 pb-24 w-full">
+      {/* Header (Clean deals.tsx style: No dots, no uppercase pill badges) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full bg-blue-500" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-              Identity & Media Review
-            </span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            Worker Photo Requests
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+            {t("admin.avatarRequests.title")}
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Review and moderate profile photo replacement requests from registered workers.
+          <p className="text-sm text-muted-foreground mt-1">
+            {t("admin.avatarRequests.desc")}
           </p>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-            {requests.length} {requests.length === 1 ? "pending request" : "pending requests"}
+          <span className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-card border border-border text-foreground font-mono shadow-xs">
+            {requests.length} {t("admin.avatarRequests.kpi.pending")}
           </span>
         </div>
       </div>
 
       {message && (
-        <div className="p-3.5 rounded-[10px] bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200/50 text-xs font-semibold">
+        <div className="p-3.5 rounded-xl bg-destructive/10 text-destructive border border-destructive/20 text-xs font-semibold">
           {message}
         </div>
       )}
 
       {requests.length === 0 ? (
-        <div className="rounded-[14px] border border-black/[0.05] dark:border-white/[0.06] bg-white dark:bg-[#141E30] p-12 text-center text-xs text-slate-400 shadow-[0_1px_3px_rgba(0,0,0,0.02)]">
-          <Camera className="w-8 h-8 text-slate-300 dark:text-slate-600 mx-auto mb-2" />
-          <p className="font-semibold text-slate-700 dark:text-slate-300">No photo change requests</p>
-          <p className="text-slate-400 mt-0.5">The review queue is currently clear.</p>
+        <div className="rounded-xl border border-border bg-card p-16 text-center text-xs text-muted-foreground shadow-xs">
+          <Camera className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+          <p className="font-semibold text-foreground text-sm">{t("admin.avatarRequests.noRequests")}</p>
         </div>
       ) : requests.map((request) => (
-        <article key={request.id} className="rounded-[14px] border border-black/[0.05] dark:border-white/[0.06] bg-white dark:bg-[#141E30] p-5 shadow-[0_1px_3px_rgba(0,0,0,0.02)] space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-black/[0.04] dark:border-white/[0.05]">
+        <article key={request.id} className="rounded-xl border border-border bg-card p-5 shadow-xs space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
             <div>
-              <h2 className="text-sm font-bold text-slate-900 dark:text-white">{request.full_name}</h2>
-              <p className="text-xs text-slate-500 dark:text-slate-400">{request.email || request.phone || "Worker account"} · {new Date(request.created_at).toLocaleString()}</p>
+              <h2 className="text-sm font-bold text-foreground">{request.full_name}</h2>
+              <p className="text-xs text-muted-foreground font-mono">{request.email || request.phone || "Worker account"} · {new Date(request.created_at).toLocaleString()}</p>
             </div>
-            <span className="text-[10px] font-semibold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-200/50">
+            <span className="text-[10px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 px-2.5 py-0.5 rounded-full border border-amber-500/20">
               Needs Review
             </span>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            {[{ label: "Current Approved Photo", url: request.current_avatar_url }, { label: "Requested Replacement", url: request.requested_avatar_url }].map((photo) => (
+            {[{ label: t("admin.avatarRequests.table.current"), url: request.current_avatar_url }, { label: t("admin.avatarRequests.table.proposed"), url: request.requested_avatar_url }].map((photo) => (
               <div key={photo.label} className="space-y-1.5">
-                <p className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">{photo.label}</p>
-                <div className="flex min-h-52 items-center justify-center overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-2">
-                  {photo.url ? <img src={photo.url} alt={photo.label} className="max-h-72 w-full object-contain rounded-lg" /> : <ImageIcon className="h-8 w-8 text-slate-400" />}
+                <p className="text-[11px] font-semibold text-muted-foreground">{photo.label}</p>
+                <div className="flex min-h-52 items-center justify-center overflow-hidden rounded-xl border border-border bg-secondary/30 p-2">
+                  {photo.url ? <img src={photo.url} alt={photo.label} className="max-h-72 w-full object-contain rounded-lg" /> : <ImageIcon className="h-8 w-8 text-muted-foreground/40" />}
                 </div>
               </div>
             ))}
           </div>
 
           {canReview ? (
-            <div className="space-y-3 pt-3 border-t border-black/[0.04] dark:border-white/[0.05]">
-              <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300" htmlFor={`reason-${request.id}`}>
-                Reviewer note <span className="text-slate-400 font-normal">(required if rejecting)</span>
+            <div className="space-y-3 pt-3 border-t border-border">
+              <label className="block text-xs font-semibold text-foreground" htmlFor={`reason-${request.id}`}>
+                Reviewer note <span className="text-muted-foreground font-normal">(required if rejecting)</span>
               </label>
               <textarea
                 id={`reason-${request.id}`}
@@ -110,7 +105,7 @@ export function WorkerAvatarRequestsClient({ requests: initialRequests, canRevie
                 onChange={(event) => setReasons((current) => ({ ...current, [request.id]: event.target.value }))}
                 maxLength={500}
                 rows={2}
-                className="w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/60 p-2.5 text-xs text-slate-900 dark:text-white outline-none focus:border-blue-500 transition"
+                className="w-full rounded-lg border border-border bg-secondary p-2.5 text-xs text-foreground placeholder:text-muted-foreground outline-none focus:border-accent transition"
                 placeholder="Example: Photo is blurry or does not clearly match verified identity."
               />
               <div className="flex flex-wrap justify-end gap-2 pt-1">
@@ -118,29 +113,29 @@ export function WorkerAvatarRequestsClient({ requests: initialRequests, canRevie
                   type="button"
                   disabled={pendingId === request.id}
                   onClick={() => void review(request, "rejected")}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-rose-200/60 dark:border-rose-900/40 bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 px-3.5 py-1.5 text-xs font-semibold hover:bg-rose-100 transition disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-destructive/20 bg-destructive/10 text-destructive px-3.5 py-1.5 text-xs font-semibold hover:bg-destructive/20 transition disabled:opacity-50 cursor-pointer"
                 >
                   <X className="h-3.5 w-3.5" />
-                  <span>Reject</span>
+                  <span>{t("admin.avatarRequests.action.reject")}</span>
                 </button>
                 <button
                   type="button"
                   disabled={pendingId === request.id}
                   onClick={() => void review(request, "approved")}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-3.5 py-1.5 text-xs font-semibold transition disabled:opacity-50 shadow-sm"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-accent text-accent-foreground px-3.5 py-1.5 text-xs font-bold transition disabled:opacity-50 shadow-xs cursor-pointer hover:opacity-90"
                 >
                   <Check className="h-3.5 w-3.5" />
-                  <span>Approve Photo</span>
+                  <span>{t("admin.avatarRequests.action.approve")}</span>
                 </button>
               </div>
             </div>
           ) : (
-            <p className="border-t border-black/[0.04] dark:border-white/[0.05] pt-3 text-xs text-slate-400">
+            <p className="border-t border-border pt-3 text-xs text-muted-foreground">
               You have read-only access to view photo requests.
             </p>
           )}
         </article>
       ))}
-    </FadeContent>
+    </div>
   );
 }

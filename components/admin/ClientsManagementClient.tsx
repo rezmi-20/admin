@@ -11,16 +11,27 @@ import {
   UserX,
   UserCheck,
   X,
-  AlertTriangle,
   User,
   ShieldCheck,
   ShieldAlert,
+  Fingerprint,
+  LayoutGrid,
+  Table as TableIcon,
+  Phone,
+  Mail,
+  Calendar,
+  AlertCircle,
+  Eye,
+  CheckCircle2,
+  Clock,
 } from "lucide-react";
+import { LiquidWaveGauge } from "./charts/LiquidWaveGauge";
 import { useLanguage } from "@/context/LanguageContext";
 import { toClientDisplayStatus } from "@/lib/client-verification-shared";
 import { sendClientVerificationReminder } from "@/lib/client-verification-reminders";
 import { setSuspendedStatus } from "@/lib/actions/super-admin";
 import FadeContent from "@/components/ui/fade-content";
+import { ClientDetailDrawer, ClientDrawerItem } from "./clients/ClientDetailDrawer";
 
 interface ClientData {
   userId: string;
@@ -57,11 +68,15 @@ export function ClientsManagementClient({
   const { t } = useLanguage();
   const router = useRouter();
   const [search, setSearch] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "table">("grid");
   const [statusFilter, setStatusFilter] = useState<
     "all" | "approved" | "pending" | "rejected" | "revoked" | "suspended" | "not_started"
   >("all");
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [drawerClient, setDrawerClient] = useState<ClientDrawerItem | null>(null);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
   const query = search.trim().toLowerCase();
 
   const displayStatus = (client: ClientData) =>
@@ -76,6 +91,19 @@ export function ClientsManagementClient({
       suspended: initialClients.filter((c) => c.isSuspended).length,
     };
   }, [initialClients]);
+
+  const verifiedPercent = counts.all > 0 ? Math.round((counts.approved / counts.all) * 100) : 0;
+
+  const chartData = useMemo(() => {
+    const list = [
+      { name: "Verified", value: counts.approved, color: "oklch(0.7 0.18 145)" },
+      { name: "Pending Review", value: counts.pending, color: "oklch(0.75 0.18 55)" },
+      { name: "Not Started", value: counts.not_started, color: "oklch(0.55 0.05 260)" },
+      { name: "Suspended", value: counts.suspended, color: "oklch(0.65 0.2 25)" },
+    ].filter((item) => item.value > 0);
+
+    return list.length > 0 ? list : [{ name: "No Records", value: 1, color: "oklch(0.3 0 0)" }];
+  }, [counts]);
 
   const filtered = useMemo(
     () =>
@@ -93,13 +121,10 @@ export function ClientsManagementClient({
   );
 
   const formatDate = (value: string | null) =>
-    value ? new Date(value).toLocaleDateString() : t("common.never" as any) || "Never";
+    value ? new Date(value).toLocaleDateString() : "Never";
 
   const isReminderCoolingDown = (value: string | null) =>
     value ? Date.now() - new Date(value).getTime() < 86_400_000 : false;
-
-  const canSendReminder = (status: string) =>
-    status === "not_started" || status === "rejected" || status === "revoked";
 
   const handleSendReminder = (clientUserId: string) => {
     setMessage(null);
@@ -107,27 +132,60 @@ export function ClientsManagementClient({
       const result = await sendClientVerificationReminder(clientUserId);
       setMessage(
         result.success
-          ? t("admin.clients.reminderSent" as any) || "Verification reminder notification sent"
-          : result.error || t("admin.clients.reminderFailed" as any) || "Failed to send reminder",
+          ? "Verification reminder notification sent successfully."
+          : result.error || "Failed to send reminder notification.",
       );
     });
   };
 
   const handleSuspension = (clientUserId: string, suspended: boolean) => {
+    if (!window.confirm(suspended ? "Suspend this client from posting jobs and funding escrow?" : "Restore this client account?")) {
+      return;
+    }
     setMessage(null);
     startTransition(async () => {
       const result = await setSuspendedStatus(clientUserId, suspended);
       if (result.success) {
-        setMessage(
-          suspended
-            ? t("admin.clients.suspended" as any) || "Client account suspended"
-            : t("admin.clients.unsuspended" as any) || "Client account restored",
-        );
+        setMessage(suspended ? "Client account suspended." : "Client account restored to active standing.");
         router.refresh();
         return;
       }
-      setMessage(result.error || t("admin.clients.suspensionFailed" as any) || "Failed to update suspension status");
+      setMessage(result.error || "Failed to update suspension status.");
     });
+  };
+
+  const statusBadge = (status: string) => {
+    switch (status) {
+      case "approved":
+        return {
+          icon: CheckCircle2,
+          class: "bg-success/10 text-success border-success/20",
+          label: "Verified",
+        };
+      case "suspended":
+        return {
+          icon: UserX,
+          class: "bg-destructive/10 text-destructive border-destructive/20",
+          label: "Suspended",
+        };
+      case "pending":
+        return {
+          icon: Clock,
+          class: "bg-warning/10 text-warning border-warning/20",
+          label: "Pending KYC",
+        };
+      default:
+        return {
+          icon: UserRound,
+          class: "bg-secondary text-muted-foreground border-border",
+          label: "Not Started",
+        };
+    }
+  };
+
+  const handleOpenDrawer = (client: ClientData) => {
+    setDrawerClient(client);
+    setIsDrawerOpen(true);
   };
 
   return (
@@ -135,260 +193,411 @@ export function ClientsManagementClient({
       {/* 1. Flush, Unboxed Header */}
       <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pt-1">
         <div>
-          <div className="flex items-center gap-2 mb-1">
-            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-            <span className="text-[11px] font-bold uppercase tracking-wider text-blue-600 dark:text-blue-400">
-              {t("admin.clients.badge" as any) || "Client Roster"}
-            </span>
-          </div>
-          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
-            {t("admin.clients.title" as any) || "Clients Directory"}
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground">
+            {t("admin.clients.title")}
           </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            {t("admin.clients.desc" as any) || "Manage registered clients, Fayda identity reviews, and escrow contract authorization."}
+          <p className="text-xs text-muted-foreground mt-0.5">
+            {t("admin.clients.desc")}
           </p>
         </div>
 
-        <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#141E30] border border-black/[0.06] dark:border-white/[0.08] shadow-2xs text-xs">
-            <span className="text-slate-400">Total Clients: </span>
-            <span className="font-bold text-slate-800 dark:text-slate-200">{initialClients.length}</span>
-          </div>
-          {counts.pending > 0 && (
-            <div className="px-3 py-1.5 rounded-lg bg-amber-50 dark:bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-xs font-bold">
-              {counts.pending} Pending Review
-            </div>
-          )}
+        {/* View Mode Switcher */}
+        <div className="flex items-center gap-1 bg-card p-1 rounded-xl border border-border shadow-xs self-start sm:self-auto">
+          <button
+            type="button"
+            onClick={() => setViewMode("grid")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              viewMode === "grid"
+                ? "bg-secondary text-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <LayoutGrid className="w-3.5 h-3.5" />
+            <span>{t("admin.clients.view.grid")}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("table")}
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              viewMode === "table"
+                ? "bg-secondary text-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <TableIcon className="w-3.5 h-3.5" />
+            <span>{t("admin.clients.view.table")}</span>
+          </button>
         </div>
       </div>
 
+      {/* Message alert */}
       {message && (
-        <div className="rounded-xl border border-blue-500/30 bg-blue-50 dark:bg-blue-500/10 p-3 text-xs font-medium text-blue-700 dark:text-blue-300 flex items-center justify-between">
+        <div className="rounded-xl border border-accent/30 bg-accent/10 p-3.5 text-xs font-medium text-foreground flex items-center justify-between shadow-xs">
           <span>{message}</span>
-          <button type="button" onClick={() => setMessage(null)} className="text-blue-400 hover:text-blue-600">
-            <X className="h-3.5 w-3.5" />
+          <button type="button" onClick={() => setMessage(null)} className="text-muted-foreground hover:text-foreground cursor-pointer">
+            <X className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* 2. Unified Table Surface Card */}
-      <div className="rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#141E30] overflow-hidden shadow-2xs">
-        {/* Integrated Top Toolbar */}
-        <div className="p-4 border-b border-black/[0.05] dark:border-white/[0.06] flex flex-col md:flex-row md:items-center justify-between gap-3">
-          {/* Search Input */}
-          <div className="relative flex-1 max-w-md">
-            <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-400" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by client name, email, phone, or Fayda FIN..."
-              className="w-full bg-slate-50 dark:bg-slate-900/60 pl-9 pr-8 py-2 rounded-lg text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 border border-slate-200/80 dark:border-slate-800 focus:outline-none focus:border-blue-500 transition"
-            />
-            {search && (
-              <button
-                type="button"
-                onClick={() => setSearch("")}
-                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            )}
+      {/* 2. Client Identity & Verification Status Gauge (Liquid Wave Chart matching user reference) */}
+      <div className="rounded-xl border border-border bg-card p-5 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-sm font-bold text-foreground">{t("admin.clients.breakdown.title")}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {t("admin.clients.breakdown.desc")}
+            </p>
           </div>
-
-          {/* Status Filter Segmented Control */}
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
-            {[
-              { id: "all", label: "All", count: counts.all },
-              { id: "approved", label: "Approved", count: counts.approved },
-              { id: "pending", label: "Pending", count: counts.pending },
-              { id: "not_started", label: "Not Started", count: counts.not_started },
-              { id: "suspended", label: "Suspended", count: counts.suspended },
-            ].map((item) => {
-              const isSelected = statusFilter === item.id;
-              return (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => setStatusFilter(item.id as typeof statusFilter)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition flex items-center gap-1.5 ${
-                    isSelected
-                      ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-2xs"
-                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  <span
-                    className={`rounded-full px-1.5 py-0.2 text-[10px] font-mono ${
-                      isSelected
-                        ? "bg-slate-800 text-white dark:bg-slate-200 dark:text-slate-900"
-                        : "bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
-                    }`}
-                  >
-                    {item.count}
-                  </span>
-                </button>
-              );
-            })}
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{t("admin.clients.breakdown.complianceRate")}:</span>
+            <span className="text-xs font-mono font-bold text-foreground bg-secondary px-2.5 py-1 rounded-lg border border-border">
+              {counts.approved} / {counts.all} ({verifiedPercent}%)
+            </span>
           </div>
         </div>
 
-        {/* Data Table */}
-        <div className="overflow-x-auto no-scrollbar">
-          <table className="w-full text-left border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-black/[0.04] dark:border-white/[0.05] text-[10px] uppercase font-bold text-slate-400 dark:text-slate-500 tracking-wider bg-slate-50/50 dark:bg-slate-900/30">
-                <th className="py-3 px-4">{t("admin.common.name" as any) || "Client Profile"}</th>
-                <th className="py-3 px-4">{t("admin.common.status" as any) || "Status"}</th>
-                <th className="py-3 px-4">{t("admin.verification.col.finDoc" as any) || "Fayda FIN & Doc"}</th>
-                <th className="py-3 px-4">Reminder Status</th>
-                <th className="py-3 px-4 text-right">{t("admin.common.actions" as any) || "Actions"}</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-black/[0.03] dark:divide-white/[0.04]">
-              {filtered.map((client) => {
-                const status = displayStatus(client);
-                const isApproved = status === "approved";
-                const isPending = status === "pending";
-                const isSuspended = client.isSuspended;
-                const coolingDown = isReminderCoolingDown(client.lastReminderAt);
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 items-center">
+          {/* Liquid Wave Circular Fill Gauge */}
+          <div className="md:col-span-5 flex items-center justify-center py-2">
+            <LiquidWaveGauge percentage={verifiedPercent} size={160} label={t("admin.clients.breakdown.verifiedEmployers")} />
+          </div>
 
-                return (
-                  <tr
-                    key={client.userId}
-                    className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40 transition-colors group"
-                  >
-                    {/* Client Name & Profile */}
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-xs shrink-0 border border-slate-200 dark:border-slate-700">
-                          {client.fullName?.charAt(0) || <User size={13} />}
-                        </div>
-                        <div className="min-w-0">
-                          <p className="font-semibold text-slate-800 dark:text-slate-100 text-xs truncate group-hover:text-blue-600 transition">
-                            {client.fullName}
-                          </p>
-                          <p className="text-[11px] text-slate-400 truncate">{client.email}</p>
-                          {client.phone && (
-                            <p className="text-[10px] text-slate-400 font-mono">+251 {client.phone}</p>
-                          )}
-                        </div>
-                      </div>
-                    </td>
+          {/* Breakdown cards - Zero fake dots */}
+          <div className="md:col-span-7 grid grid-cols-2 gap-3">
+            <div className="p-3.5 rounded-xl bg-secondary/40 border border-border">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-foreground font-semibold">
+                  {t("admin.clients.breakdown.verifiedFayda")}
+                </span>
+                <span className="font-mono font-bold text-success text-sm">{counts.approved}</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">{t("admin.clients.breakdown.verifiedFaydaDesc")}</p>
+            </div>
 
-                    {/* Status Pill */}
-                    <td className="py-3 px-4">
-                      <span
-                        className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${
-                          isApproved
-                            ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-200/50"
-                            : isSuspended || status === "rejected" || status === "revoked"
-                            ? "bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border-rose-200/50"
-                            : isPending
-                            ? "bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200/50"
-                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
-                        }`}
-                      >
-                        <span
-                          className={`w-1.5 h-1.5 rounded-full ${
-                            isApproved
-                              ? "bg-emerald-500"
-                              : isSuspended
-                              ? "bg-rose-500"
-                              : isPending
-                              ? "bg-amber-500"
-                              : "bg-slate-400"
-                          }`}
-                        />
-                        <span className="capitalize">{status.replaceAll("_", " ")}</span>
-                      </span>
-                    </td>
+            <div className="p-3.5 rounded-xl bg-secondary/40 border border-border">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-foreground font-semibold">
+                  {t("admin.clients.breakdown.pendingKyc")}
+                </span>
+                <span className="font-mono font-bold text-warning text-sm">{counts.pending}</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">{t("admin.clients.breakdown.pendingKycDesc")}</p>
+            </div>
 
-                    {/* Fayda FIN & Doc */}
-                    <td className="py-3 px-4 text-xs">
-                      <p className="font-mono text-xs font-semibold text-slate-700 dark:text-slate-300">
-                        {client.maskedFin || "No FIN"}
-                      </p>
-                      <p className="text-[11px] text-slate-400">
-                        {client.hasDocument ? "Document on file" : "No document"}
-                      </p>
-                    </td>
+            <div className="p-3.5 rounded-xl bg-secondary/40 border border-border">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-foreground font-semibold">
+                  {t("admin.clients.breakdown.notStarted")}
+                </span>
+                <span className="font-mono font-bold text-muted-foreground text-sm">{counts.not_started}</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">{t("admin.clients.breakdown.notStartedDesc")}</p>
+            </div>
 
-                    {/* Reminder Status */}
-                    <td className="py-3 px-4 text-xs text-slate-600 dark:text-slate-400">
-                      <p className="font-medium text-slate-700 dark:text-slate-300">
-                        {client.reminderCount > 0 ? `${client.reminderCount} sent` : "No reminders"}
-                      </p>
-                      <p className="text-[10px] text-slate-400">Last: {formatDate(client.lastReminderAt)}</p>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        {canOpenDetails && (
-                          <Link
-                            href={`/admin/clients/${client.userId}/verify`}
-                            className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-blue-50 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 hover:text-blue-600 dark:text-slate-200 font-semibold transition"
-                          >
-                            <span>{canReview && isPending ? "Review" : "View"}</span>
-                            <ExternalLink className="h-3 w-3" />
-                          </Link>
-                        )}
-
-                        {canReview && canSendReminder(status) && (
-                          <button
-                            type="button"
-                            onClick={() => handleSendReminder(client.userId)}
-                            disabled={coolingDown || isPending}
-                            title={coolingDown ? "Reminder sent recently" : "Send verification reminder"}
-                            className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-800 text-slate-500 hover:text-blue-600 hover:bg-slate-50 dark:hover:bg-slate-800 disabled:opacity-40 transition"
-                          >
-                            <Bell className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-
-                        {canSuspendAccount && !client.isSuspended && (
-                          <button
-                            type="button"
-                            onClick={() => handleSuspension(client.userId, true)}
-                            disabled={isPending}
-                            title="Suspend client"
-                            className="p-1.5 rounded-lg border border-rose-200/60 dark:border-rose-900/40 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition"
-                          >
-                            <UserX className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-
-                        {canReactivateAccount && client.isSuspended && (
-                          <button
-                            type="button"
-                            onClick={() => handleSuspension(client.userId, false)}
-                            disabled={isPending}
-                            title="Unsuspend client"
-                            className="p-1.5 rounded-lg border border-emerald-200/60 dark:border-emerald-900/40 text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-500/10 transition"
-                          >
-                            <UserCheck className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-
-              {filtered.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="py-16 text-center text-slate-400">
-                    <UserRound className="mx-auto h-8 w-8 opacity-30 mb-2" />
-                    <p className="text-xs font-semibold text-slate-600 dark:text-slate-300">
-                      No clients found matching filters.
-                    </p>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+            <div className="p-3.5 rounded-xl bg-secondary/40 border border-border">
+              <div className="flex items-center justify-between text-xs mb-1">
+                <span className="text-foreground font-semibold">
+                  {t("admin.clients.breakdown.suspended")}
+                </span>
+                <span className="font-mono font-bold text-destructive text-sm">{counts.suspended}</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground">{t("admin.clients.breakdown.suspendedDesc")}</p>
+            </div>
+          </div>
         </div>
       </div>
+
+      {/* 3. Search & Filter Bar (Uncontained) */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+        {/* Search */}
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t("admin.clients.searchPlaceholder")}
+            className="w-full h-9 pl-9 pr-8 rounded-lg bg-secondary border border-border text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent transition"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        {/* Filter Chips */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+          {[
+            { id: "all", label: t("admin.clients.filter.all"), count: counts.all },
+            { id: "approved", label: t("admin.clients.filter.approved"), count: counts.approved },
+            { id: "pending", label: t("admin.clients.filter.pending"), count: counts.pending },
+            { id: "not_started", label: t("admin.clients.filter.notStarted"), count: counts.not_started },
+            { id: "suspended", label: t("admin.clients.filter.suspended"), count: counts.suspended },
+          ].map((chip) => (
+            <button
+              key={chip.id}
+              type="button"
+              onClick={() => setStatusFilter(chip.id as typeof statusFilter)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold shrink-0 transition flex items-center gap-1.5 cursor-pointer ${
+                statusFilter === chip.id
+                  ? "bg-accent text-accent-foreground shadow-xs font-bold"
+                  : "bg-secondary text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <span>{chip.label}</span>
+              <span className="text-[10px] font-mono opacity-80">({chip.count})</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 4. Clients Presentation: 3-Column Dossier Grid or Registry Table */}
+      {viewMode === "grid" ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filtered.map((client) => {
+            const status = displayStatus(client);
+            const statusInfo = statusBadge(status);
+            const StatusIcon = statusInfo.icon;
+            const coolingDown = isReminderCoolingDown(client.lastReminderAt);
+
+            return (
+              <div
+                key={client.userId}
+                className="rounded-xl border border-border bg-card p-5 space-y-4 hover:border-accent/40 transition-all duration-200 shadow-xs flex flex-col justify-between"
+              >
+                <div>
+                  {/* Card Top: Avatar, Name & Status Pill */}
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-11 h-11 rounded-xl bg-secondary border border-border flex items-center justify-center font-bold text-foreground text-sm shadow-xs shrink-0">
+                        {client.fullName?.charAt(0) || <User className="w-5 h-5 text-muted-foreground" />}
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-foreground truncate">{client.fullName}</h3>
+                        <p className="text-xs text-muted-foreground truncate">{client.email}</p>
+                        {client.phone && (
+                          <p className="text-[11px] font-mono text-muted-foreground mt-0.5 truncate">
+                            +251 {client.phone}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+
+                    <span
+                      className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full border shrink-0 ${statusInfo.class}`}
+                    >
+                      <StatusIcon className="w-3 h-3" />
+                      <span>{statusInfo.label}</span>
+                    </span>
+                  </div>
+
+                  {/* Card Middle: Fayda Status & Registration details */}
+                  <div className="mt-4 pt-3 border-t border-border/60 grid grid-cols-2 gap-2 text-xs">
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground">Fayda FIN</span>
+                      <p className="font-mono font-semibold text-foreground truncate">
+                        {client.maskedFin || "No FIN"}
+                      </p>
+                    </div>
+                    <div className="space-y-0.5">
+                      <span className="text-[10px] uppercase font-bold text-muted-foreground">KYC Document</span>
+                      <p className="font-semibold text-foreground truncate">
+                        {client.hasDocument ? "Scan On File" : "No Document"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Card Bottom: Action Toolbar */}
+                <div className="pt-3 border-t border-border/60 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenDrawer(client)}
+                      className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground font-semibold border border-border transition cursor-pointer"
+                    >
+                      <Eye className="w-3 h-3 text-muted-foreground" />
+                      <span>{t("admin.clients.inspect")}</span>
+                    </button>
+
+                    {canOpenDetails && (
+                      <Link
+                        href={`/admin/clients/${client.userId}`}
+                        className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent font-semibold border border-accent/20 transition"
+                      >
+                        <User className="w-3 h-3" />
+                        <span>Profile</span>
+                      </Link>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    {canReview && (status === "not_started" || status === "rejected") && (
+                      <button
+                        type="button"
+                        onClick={() => handleSendReminder(client.userId)}
+                        disabled={coolingDown || isPending}
+                        title={coolingDown ? "Reminder sent recently" : "Send KYC reminder"}
+                        className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-40 transition"
+                      >
+                        <Bell className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    {canSuspendAccount && !client.isSuspended && (
+                      <button
+                        type="button"
+                        onClick={() => handleSuspension(client.userId, true)}
+                        disabled={isPending}
+                        title="Suspend client account"
+                        className="p-1.5 rounded-lg border border-destructive/30 text-destructive hover:bg-destructive/10 transition"
+                      >
+                        <UserX className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+
+                    {canReactivateAccount && client.isSuspended && (
+                      <button
+                        type="button"
+                        onClick={() => handleSuspension(client.userId, false)}
+                        disabled={isPending}
+                        title="Reactivate client account"
+                        className="p-1.5 rounded-lg border border-success/30 text-success hover:bg-success/10 transition"
+                      >
+                        <UserCheck className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {filtered.length === 0 && (
+            <div className="col-span-full py-12 text-center text-xs text-muted-foreground bg-card border border-border rounded-xl">
+              No clients found matching the selected filter criteria.
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-border bg-card overflow-hidden shadow-xs">
+          <div className="overflow-x-auto no-scrollbar">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="border-b border-border text-[10px] uppercase font-bold text-muted-foreground tracking-wider bg-secondary/50">
+                  <th className="py-3 px-4">Client</th>
+                  <th className="py-3 px-4">Status</th>
+                  <th className="py-3 px-4">Fayda National ID</th>
+                  <th className="py-3 px-4">KYC Document</th>
+                  <th className="py-3 px-4">Registered</th>
+                  <th className="py-3 px-4 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border text-sm">
+                {filtered.map((client) => {
+                  const status = displayStatus(client);
+                  const statusInfo = statusBadge(status);
+                  const StatusIcon = statusInfo.icon;
+                  const coolingDown = isReminderCoolingDown(client.lastReminderAt);
+
+                  return (
+                    <tr key={client.userId} className="hover:bg-secondary/40 transition-colors group">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center font-bold text-xs text-muted-foreground">
+                            {client.fullName?.charAt(0) || <User className="w-3.5 h-3.5" />}
+                          </div>
+                          <div>
+                            <p className="font-semibold text-foreground text-xs">{client.fullName}</p>
+                            <p className="text-[11px] text-muted-foreground">{client.email}</p>
+                          </div>
+                        </div>
+                      </td>
+
+                      <td className="py-3 px-4">
+                        <span
+                          className={`inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-0.5 rounded-full border ${statusInfo.class}`}
+                        >
+                          <StatusIcon className="w-3 h-3" />
+                          <span>{statusInfo.label}</span>
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-xs font-mono text-muted-foreground">
+                        {client.maskedFin || "None"}
+                      </td>
+
+                      <td className="py-3 px-4 text-xs font-medium">
+                        {client.hasDocument ? (
+                          <span className="text-success flex items-center gap-1">
+                            <ShieldCheck className="w-3.5 h-3.5" />
+                            <span>Uploaded</span>
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground">Missing</span>
+                        )}
+                      </td>
+
+                      <td className="py-3 px-4 text-xs text-muted-foreground font-mono">
+                        {new Date(client.createdAt).toLocaleDateString()}
+                      </td>
+
+                      <td className="py-3 px-4 text-right">
+                        <div className="inline-flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleOpenDrawer(client)}
+                            className="px-2.5 py-1.5 rounded-lg bg-secondary hover:bg-secondary/80 text-foreground text-xs font-medium transition flex items-center gap-1"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                            <span>Review</span>
+                          </button>
+
+                          {canOpenDetails && (
+                            <Link
+                              href={`/admin/clients/${client.userId}`}
+                              className="inline-flex items-center gap-1 text-xs px-2.5 py-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent font-medium transition"
+                            >
+                              <User className="h-3 w-3" />
+                              <span>Profile</span>
+                            </Link>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-12 text-center text-xs text-muted-foreground">
+                      No client accounts matching current search.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Slide-out Client Detail Drawer */}
+      <ClientDetailDrawer
+        client={drawerClient}
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        canReview={canReview}
+        canSuspend={canSuspendAccount}
+        canReactivate={canReactivateAccount}
+        onStatusChanged={() => {
+          setIsDrawerOpen(false);
+          router.refresh();
+        }}
+      />
     </FadeContent>
   );
 }

@@ -7,12 +7,13 @@ import { usePathname } from "next/navigation";
 import { useTheme } from "next-themes";
 import { useLanguage } from "@/context/LanguageContext";
 import DireSkillLogo from "@/components/shell/DireSkillLogo";
+import { cn } from "@/lib/utils";
 import {
   LayoutDashboard, Users, ShieldCheck, Briefcase, UserRound, Camera,
   FileText, DollarSign, Scale, Megaphone,
   BarChart2, Gavel, ChevronLeft, ChevronRight, ChevronDown, LogOut, Crown,
-  LifeBuoy, ClipboardList, UserCircle, AlertTriangle, FileCheck, Sun, Moon,
-  Settings, FolderKanban, ShieldAlert
+  LifeBuoy, ClipboardList, AlertTriangle, FileCheck, Sun, Moon,
+  Settings, FolderKanban
 } from "lucide-react";
 import type { AdminPermission, AdminRole } from "@/lib/admin-authorization";
 
@@ -49,17 +50,17 @@ export function Sidebar({ userEmail, adminName, adminRole, permissions }: Sideba
 
   const can = (permission: AdminPermission) => permissions.includes(permission);
 
-  // Grouped Navigation based on platform role and functionality
+  // Grouped Navigation preserving all 18 categories based on platform role and functionality
   const navGroups: NavGroup[] = [
     {
       id: "overview",
-      title: "Overview",
+      title: t("admin.sidebar.overview" as any) || "Overview",
       icon: <LayoutDashboard className="w-4 h-4" />,
       items: [
         {
           href: "/admin/dashboard",
           icon: <LayoutDashboard className="w-4 h-4" />,
-          label: t("admin.dashboard" as any) || "Dashboard",
+          label: t("admin.sidebar.dashboard" as any) || "Dashboard",
           visible: true,
           dotColor: "bg-blue-500",
         },
@@ -67,136 +68,136 @@ export function Sidebar({ userEmail, adminName, adminRole, permissions }: Sideba
     },
     {
       id: "identity",
-      title: "Identity & Verification",
+      title: t("admin.sidebar.identity" as any) || "Identity & Verification",
       icon: <ShieldCheck className="w-4 h-4" />,
       items: [
         {
           href: "/admin/verify",
           icon: <ShieldCheck className="w-4 h-4" />,
-          label: "Verification Queue",
+          label: t("admin.sidebar.verifyQueue" as any) || "Verification Queue",
           visible: can("verification.read"),
           dotColor: "bg-emerald-500",
         },
         {
           href: "/admin/worker-avatar-requests",
           icon: <Camera className="w-4 h-4" />,
-          label: "Photo Requests",
+          label: t("admin.sidebar.photoRequests" as any) || "Photo Requests",
           visible: can("verification.read"),
         },
         {
           href: "/admin/workers",
           icon: <Users className="w-4 h-4" />,
-          label: t("admin.workers" as any) || "Workers Directory",
+          label: t("admin.sidebar.workers" as any) || "Workers Directory",
           visible: can("verification.read"),
         },
         {
           href: "/admin/clients",
           icon: <UserRound className="w-4 h-4" />,
-          label: t("admin.clients" as any) || "Clients Directory",
+          label: t("admin.sidebar.clients" as any) || "Clients Directory",
           visible: can("verification.read"),
         },
       ],
     },
     {
       id: "disputes",
-      title: "Disputes & Legal",
+      title: t("admin.sidebar.disputesGroup" as any) || "Disputes & Legal",
       icon: <Scale className="w-4 h-4" />,
       items: [
         {
           href: "/admin/disputes",
           icon: <Scale className="w-4 h-4" />,
-          label: t("admin.disputes" as any) || "Disputes Adjudication",
+          label: t("admin.sidebar.disputes" as any) || "Disputes Adjudication",
           visible: can("disputes.read"),
           dotColor: "bg-rose-500",
         },
         {
           href: "/admin/court-evidence",
           icon: <FileCheck className="w-4 h-4" />,
-          label: "Court Evidence",
+          label: t("admin.sidebar.courtEvidence" as any) || "Court Evidence",
           visible: isSuperAdmin,
           badge: "Legal",
         },
         {
           href: "/admin/appeals",
           icon: <Gavel className="w-4 h-4" />,
-          label: "Appeals",
+          label: t("admin.sidebar.appeals" as any) || "Appeals",
           visible: can("appeals.read") && isSuperAdmin,
         },
         {
           href: "/admin/misconduct",
           icon: <AlertTriangle className="w-4 h-4" />,
-          label: "Admin Misconduct",
+          label: t("admin.sidebar.misconduct" as any) || "Admin Misconduct",
           visible: can("admin_misconduct.review") && isSuperAdmin,
         },
       ],
     },
     {
       id: "operations",
-      title: "Operations & Marketplace",
+      title: t("admin.sidebar.operations" as any) || "Operations & Marketplace",
       icon: <FolderKanban className="w-4 h-4" />,
       items: [
         {
           href: "/admin/payments",
           icon: <DollarSign className="w-4 h-4" />,
-          label: t("admin.payments" as any) || "Payment Cases",
+          label: t("admin.sidebar.payments" as any) || "Payment Cases",
           visible: can("payment_cases.read"),
           dotColor: "bg-amber-500",
         },
         {
           href: "/admin/support",
           icon: <LifeBuoy className="w-4 h-4" />,
-          label: "Support Tickets",
+          label: t("admin.sidebar.support" as any) || "Support Tickets",
           visible: can("support.read"),
           dotColor: "bg-violet-500",
         },
         {
           href: "/admin/jobs",
           icon: <Briefcase className="w-4 h-4" />,
-          label: t("admin.jobs" as any) || "Jobs Oversight",
+          label: t("admin.sidebar.jobs" as any) || "Jobs Oversight",
           visible: can("reports.read"),
         },
         {
           href: "/admin/contracts",
           icon: <FileText className="w-4 h-4" />,
-          label: t("admin.contracts" as any) || "Contracts Registry",
+          label: t("admin.sidebar.contracts" as any) || "Contracts Registry",
           visible: can("reports.read"),
         },
         {
           href: "/admin/community",
           icon: <Megaphone className="w-4 h-4" />,
-          label: t("admin.community" as any) || "Community Moderation",
+          label: t("admin.sidebar.community" as any) || "Community Moderation",
           visible: can("content.read"),
         },
       ],
     },
     {
       id: "system",
-      title: "System & Governance",
+      title: t("admin.sidebar.system" as any) || "System & Governance",
       icon: <Crown className="w-4 h-4" />,
       items: [
         {
           href: "/admin/reports",
           icon: <BarChart2 className="w-4 h-4" />,
-          label: t("admin.reports" as any) || "Platform Analytics",
+          label: t("admin.sidebar.reports" as any) || "Platform Analytics",
           visible: can("reports.read"),
         },
         {
           href: "/admin/users",
           icon: <Crown className="w-4 h-4" />,
-          label: t("admin.users" as any) || "Staff & Access Roles",
+          label: t("admin.sidebar.users" as any) || "Staff & Access Roles",
           visible: can("admin_accounts.read") && isSuperAdmin,
           badge: "Full",
         },
         {
           href: "/admin/audit",
           icon: <ClipboardList className="w-4 h-4" />,
-          label: "System Audit Logs",
+          label: t("admin.sidebar.audit" as any) || "System Audit Logs",
           visible: can("audit.read") && isSuperAdmin,
         },
         {
           href: "/admin/settings",
           icon: <Settings className="w-4 h-4" />,
-          label: "Platform Settings",
+          label: t("admin.sidebar.settings" as any) || "Platform Settings",
           visible: isSuperAdmin,
         },
       ],
@@ -253,44 +254,47 @@ export function Sidebar({ userEmail, adminName, adminRole, permissions }: Sideba
 
   return (
     <aside
-      className={`relative hidden lg:flex flex-col shrink-0 h-full transition-all duration-300 ease-in-out
-        bg-white dark:bg-[#111827] border-r border-[#EEF0F2] dark:border-slate-800/80 select-none z-30
-        ${collapsed ? "w-[64px]" : "w-[180px]"}`}
+      className={cn(
+        "relative hidden lg:flex flex-col shrink-0 h-full transition-all duration-300 ease-out select-none z-30",
+        "bg-sidebar border-r border-sidebar-border",
+        collapsed ? "w-[68px]" : "w-[245px]"
+      )}
     >
-      {/* ── Brand Header (Flush Top) ── */}
+      {/* ── Brand Header (Flush Top with Top Collapse Button) ── */}
       <div
-        className={`flex items-center h-14 px-3.5 border-b border-[#F1F2F4] dark:border-slate-800/60 ${
-          collapsed ? "justify-center" : "justify-between"
-        }`}
+        className={cn(
+          "flex items-center h-16 px-3.5 border-b border-sidebar-border",
+          collapsed ? "flex-col justify-center gap-1 py-2 h-auto" : "justify-between"
+        )}
       >
-        <div className="flex items-center gap-2 overflow-hidden">
+        <div className="flex items-center gap-2.5 overflow-hidden">
           <DireSkillLogo variant="color" iconSize={26} showWordmark={!collapsed} />
         </div>
-        {!collapsed && (
-          <button
-            onClick={toggleCollapse}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 dark:hover:text-slate-200 dark:hover:bg-slate-800 transition"
-            title="Collapse sidebar"
-          >
+
+        <button
+          onClick={toggleCollapse}
+          className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent transition-all duration-200 cursor-pointer"
+          title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? (
+            <ChevronRight className="w-4 h-4" />
+          ) : (
             <ChevronLeft className="w-4 h-4" />
-          </button>
-        )}
+          )}
+        </button>
       </div>
 
-      {/* ── Navigation Links (Scrollable Dropdown Groups) ── */}
-      <nav className="flex-1 overflow-y-auto no-scrollbar py-2.5 px-2 space-y-1.5">
+      {/* ── Navigation Links (Preserves All 18 Categories) ── */}
+      <nav className="flex-1 overflow-y-auto no-scrollbar py-3 px-2 space-y-2">
         {navGroups.map((group) => {
           const visibleItems = group.items.filter((item) => item.visible);
           if (visibleItems.length === 0) return null;
 
           const isGroupOpen = openGroups[group.id] ?? false;
-          const hasActiveItem = visibleItems.some(
-            (item) => pathname === item.href || (item.href !== "/admin/dashboard" && pathname?.startsWith(item.href))
-          );
 
           if (collapsed) {
             return (
-              <div key={group.id} className="py-1 border-b border-slate-100 dark:border-slate-800 last:border-none">
+              <div key={group.id} className="py-1 border-b border-sidebar-border/40 last:border-none space-y-1">
                 {visibleItems.map(({ href, icon, label, dotColor }) => {
                   const isActive = pathname === href || (href !== "/admin/dashboard" && pathname?.startsWith(href));
                   return (
@@ -298,17 +302,23 @@ export function Sidebar({ userEmail, adminName, adminRole, permissions }: Sideba
                       key={href}
                       href={href}
                       title={label}
-                      className={`flex items-center justify-center w-9 h-9 mx-auto rounded-lg transition-all mb-1 relative
-                        ${
-                          isActive
-                            ? "bg-blue-600 text-white shadow-xs"
-                            : "text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white"
-                        }`}
-                    >
-                      {icon}
-                      {dotColor && !isActive && (
-                        <span className={`absolute top-1.5 right-1.5 w-1.5 h-1.5 rounded-full ${dotColor}`} />
+                      className={cn(
+                        "relative flex items-center justify-center w-10 h-10 mx-auto rounded-lg transition-all duration-200 group",
+                        isActive
+                          ? "bg-sidebar-accent text-accent shadow-xs"
+                          : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
                       )}
+                    >
+                      {/* Active Left Indicator Bar */}
+                      <span
+                        className={cn(
+                          "absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-accent transition-all duration-300",
+                          isActive ? "opacity-100" : "opacity-0"
+                        )}
+                      />
+                      <span className="transition-transform duration-200 group-hover:scale-110">
+                        {icon}
+                      </span>
                     </Link>
                   );
                 })}
@@ -320,71 +330,90 @@ export function Sidebar({ userEmail, adminName, adminRole, permissions }: Sideba
             const item = visibleItems[0];
             const isActive = pathname === item.href || pathname === "/admin";
             return (
-              <div key={group.id} className="px-1 mb-1">
+              <div key={group.id} className="px-1">
                 <Link
                   href={item.href}
-                  className={`flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-[12.5px] font-semibold transition-all ${
+                  className={cn(
+                    "group relative w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200",
                     isActive
-                      ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 font-bold"
-                      : "text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-white"
-                  }`}
+                      ? "bg-sidebar-accent text-sidebar-foreground font-semibold"
+                      : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                  )}
                 >
-                  <span className={isActive ? "text-blue-600 dark:text-blue-400" : "text-slate-400"}>
+                  {/* Active Left Indicator Bar */}
+                  <span
+                    className={cn(
+                      "absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-accent transition-all duration-300",
+                      isActive ? "opacity-100" : "opacity-0"
+                    )}
+                  />
+                  <span
+                    className={cn(
+                      "shrink-0 transition-transform duration-200",
+                      isActive ? "text-accent" : "text-muted-foreground group-hover:scale-110 group-hover:text-foreground"
+                    )}
+                  >
                     {item.icon}
                   </span>
                   <span className="truncate flex-1">{item.label}</span>
-                  {isActive && <span className="w-1.5 h-1.5 rounded-full bg-blue-500" />}
                 </Link>
               </div>
             );
           }
 
           return (
-            <div key={group.id} className="rounded-lg overflow-hidden">
+            <div key={group.id} className="rounded-lg">
               <button
                 type="button"
                 onClick={() => toggleGroup(group.id)}
-                className={`w-full flex items-center justify-between px-2 py-1 rounded text-left transition-colors ${
-                  hasActiveItem
-                    ? "text-blue-600 dark:text-blue-400 font-bold"
-                    : "text-slate-400 hover:text-slate-700 dark:text-slate-400 dark:hover:text-slate-200"
-                }`}
+                className="w-full flex items-center justify-between px-2.5 py-1.5 text-left text-muted-foreground hover:text-sidebar-foreground transition-colors group cursor-pointer"
               >
-                <span className="text-[10px] font-bold uppercase tracking-wider truncate">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground/80 group-hover:text-sidebar-foreground">
                   {group.title}
                 </span>
                 <ChevronDown
-                  className={`w-3 h-3 transition-transform duration-200 ${
-                    isGroupOpen ? "rotate-0 text-slate-500" : "-rotate-90 text-slate-400"
-                  }`}
+                  className={cn(
+                    "w-3.5 h-3.5 transition-transform duration-200 text-muted-foreground/60 group-hover:text-sidebar-foreground",
+                    isGroupOpen ? "rotate-0" : "-rotate-90"
+                  )}
                 />
               </button>
 
               {isGroupOpen && (
-                <div className="mt-0.5 space-y-0.5 pl-1 pr-0.5">
+                <div className="mt-1 space-y-0.5">
                   {visibleItems.map(({ href, icon, label, dotColor, badge }) => {
                     const isActive = pathname === href || (href !== "/admin/dashboard" && pathname?.startsWith(href));
                     return (
                       <Link
                         key={href}
                         href={href}
-                        className={`flex items-center gap-2 px-2 py-1.5 rounded-md text-[12px] font-medium transition-all ${
+                        className={cn(
+                          "group relative w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200",
                           isActive
-                            ? "bg-blue-50 text-blue-600 dark:bg-blue-950/60 dark:text-blue-400 font-semibold"
-                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 hover:text-slate-900 dark:hover:text-slate-200"
-                        }`}
+                            ? "bg-sidebar-accent text-sidebar-foreground font-semibold"
+                            : "text-muted-foreground hover:text-sidebar-foreground hover:bg-sidebar-accent/50"
+                        )}
                       >
-                        <span className={`shrink-0 ${isActive ? "text-blue-600 dark:text-blue-400" : "text-slate-400"}`}>
+                        {/* Active Left Indicator Bar */}
+                        <span
+                          className={cn(
+                            "absolute left-0 top-1/2 -translate-y-1/2 w-1 h-5 rounded-r-full bg-accent transition-all duration-300",
+                            isActive ? "opacity-100" : "opacity-0"
+                          )}
+                        />
+                        <span
+                          className={cn(
+                            "shrink-0 transition-transform duration-200",
+                            isActive ? "text-accent" : "text-muted-foreground group-hover:scale-110 group-hover:text-foreground"
+                          )}
+                        >
                           {icon}
                         </span>
                         <span className="truncate flex-1">{label}</span>
                         {badge && (
-                          <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-amber-100 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 uppercase">
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20 uppercase tracking-wider">
                             {badge}
                           </span>
-                        )}
-                        {dotColor && isActive && !badge && (
-                          <span className={`w-1.5 h-1.5 rounded-full ${dotColor}`} />
                         )}
                       </Link>
                     );
@@ -396,16 +425,17 @@ export function Sidebar({ userEmail, adminName, adminRole, permissions }: Sideba
         })}
       </nav>
 
-      {/* ── Bottom Sidebar: Real Admin Profile & Segmented Theme Switcher ── */}
-      <div className="p-2 border-t border-[#F1F2F4] dark:border-slate-800/60 bg-white dark:bg-[#111827] space-y-1.5">
+      {/* ── Bottom Sidebar: Admin Profile & Segmented Theme Switcher ── */}
+      <div className="p-2.5 border-t border-sidebar-border bg-sidebar space-y-2">
         <div
-          className={`flex items-center gap-2 p-1 rounded-lg ${
-            collapsed ? "justify-center" : "bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/60 dark:border-slate-700/60"
-          }`}
+          className={cn(
+            "flex items-center gap-2 p-1.5 rounded-xl border border-sidebar-border bg-sidebar-accent/40",
+            collapsed && "justify-center p-1"
+          )}
         >
           <Link
             href="/admin/profile"
-            className="w-7 h-7 rounded-full bg-gradient-to-tr from-blue-600 to-indigo-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-xs"
+            className="w-8 h-8 rounded-lg bg-gradient-to-tr from-accent to-chart-1 text-accent-foreground flex items-center justify-center font-bold text-xs shrink-0 shadow-xs hover:opacity-90 transition"
             title="Profile"
           >
             {getInitials(userEmail || adminName || "AD")}
@@ -414,10 +444,10 @@ export function Sidebar({ userEmail, adminName, adminRole, permissions }: Sideba
           {!collapsed && (
             <div className="min-w-0 flex-1">
               <Link href="/admin/profile" className="block group">
-                <p className="text-xs font-bold text-slate-900 dark:text-white truncate leading-tight group-hover:text-blue-600">
+                <p className="text-xs font-semibold text-sidebar-foreground truncate leading-tight group-hover:text-accent">
                   {adminName || userEmail?.split("@")[0] || "Admin"}
                 </p>
-                <p className="text-[10px] text-slate-400 dark:text-slate-500 truncate leading-tight">
+                <p className="text-[10px] text-muted-foreground truncate leading-tight">
                   {userEmail || "admin@example.com"}
                 </p>
               </Link>
@@ -428,7 +458,7 @@ export function Sidebar({ userEmail, adminName, adminRole, permissions }: Sideba
             <button
               onClick={handleLogout}
               title={t("admin.exitSystem" as any) || "Sign Out"}
-              className="p-1 text-slate-400 hover:text-rose-600 rounded transition shrink-0"
+              className="p-1.5 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-lg transition shrink-0 cursor-pointer"
             >
               <LogOut className="w-3.5 h-3.5" />
             </button>
@@ -438,41 +468,45 @@ export function Sidebar({ userEmail, adminName, adminRole, permissions }: Sideba
         {/* Light & Dark Mode Segmented Toggle */}
         {mounted && (
           <div
-            className={`flex items-center bg-[#F3F4F6] dark:bg-slate-800 rounded-lg p-0.5 ${
+            className={cn(
+              "flex items-center bg-secondary/80 rounded-lg p-0.5 border border-border/50",
               collapsed ? "justify-center" : "w-full"
-            }`}
+            )}
           >
             {collapsed ? (
               <button
                 onClick={() => setTheme(isDark ? "light" : "dark")}
-                className="w-7 h-7 flex items-center justify-center rounded text-slate-600 dark:text-slate-300"
+                className="w-8 h-8 flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground transition cursor-pointer"
+                title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
               >
-                {isDark ? <Moon className="w-3.5 h-3.5 text-blue-400" /> : <Sun className="w-3.5 h-3.5 text-amber-500" />}
+                {isDark ? <Moon className="w-3.5 h-3.5 text-accent" /> : <Sun className="w-3.5 h-3.5 text-amber-500" />}
               </button>
             ) : (
               <>
                 <button
                   type="button"
                   onClick={() => setTheme("light")}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1 rounded text-[11px] font-semibold transition-all ${
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] font-semibold transition-all cursor-pointer",
                     !isDark
-                      ? "bg-white text-slate-900 shadow-xs font-bold"
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400"
-                  }`}
+                      ? "bg-card text-foreground shadow-xs font-bold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
                 >
-                  <Sun className={`w-3 h-3 ${!isDark ? "text-amber-500" : "text-slate-400"}`} />
+                  <Sun className={cn("w-3.5 h-3.5", !isDark ? "text-amber-500" : "text-muted-foreground")} />
                   <span>Light</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setTheme("dark")}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1 rounded text-[11px] font-semibold transition-all ${
+                  className={cn(
+                    "flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md text-[11px] font-semibold transition-all cursor-pointer",
                     isDark
-                      ? "bg-slate-700 text-white shadow-xs font-bold"
-                      : "text-slate-500 hover:text-white"
-                  }`}
+                      ? "bg-card text-foreground shadow-xs font-bold"
+                      : "text-muted-foreground hover:text-foreground"
+                  )}
                 >
-                  <Moon className={`w-3 h-3 ${isDark ? "text-blue-400" : "text-slate-400"}`} />
+                  <Moon className={cn("w-3.5 h-3.5", isDark ? "text-accent" : "text-muted-foreground")} />
                   <span>Dark</span>
                 </button>
               </>
@@ -480,16 +514,6 @@ export function Sidebar({ userEmail, adminName, adminRole, permissions }: Sideba
           </div>
         )}
       </div>
-
-      {collapsed && (
-        <button
-          onClick={toggleCollapse}
-          className="absolute -right-3 top-4 w-6 h-6 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 flex items-center justify-center text-slate-500 shadow-xs z-30 hover:scale-105 transition"
-          title="Expand sidebar"
-        >
-          <ChevronRight className="w-3.5 h-3.5" />
-        </button>
-      )}
     </aside>
   );
 }

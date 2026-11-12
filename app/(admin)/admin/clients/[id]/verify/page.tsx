@@ -166,16 +166,16 @@ export default async function ClientVerificationReviewPage({
   // State: Not Started
   if (displayStatus === "not_started") {
     return (
-      <div className="max-w-5xl mx-auto space-y-6 pb-24">
+      <div className="space-y-6 pb-24">
         {/* Flush Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
           <div className="space-y-1.5">
             <Link
-              href="/admin/verify"
-              className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition"
+              href={`/admin/clients/${id}`}
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition"
             >
               <ArrowLeft className="h-3.5 w-3.5" />
-              <span>Verification Queue</span>
+              <span>Back to Client Profile</span>
             </Link>
             <div className="flex items-center gap-2">
               <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
@@ -279,16 +279,16 @@ export default async function ClientVerificationReviewPage({
 
   // State: Reviewable Client Verification (Split-screen Studio)
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-24">
+    <div className="space-y-6 pb-24">
       {/* 1. Flush, Unboxed Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1 pb-2">
         <div className="space-y-2">
           <Link
-            href="/admin/verify"
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition"
+            href={`/admin/clients/${id}`}
+            className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground hover:text-foreground transition"
           >
             <ArrowLeft className="h-3.5 w-3.5" />
-            <span>Verification Queue</span>
+            <span>Back to Client Profile</span>
           </Link>
 
           <div className="flex items-center gap-3">

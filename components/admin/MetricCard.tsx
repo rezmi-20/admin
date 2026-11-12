@@ -24,14 +24,11 @@ export function MetricCard({
 }: MetricCardProps) {
   return (
     <div className="rounded-[12px] border border-black/[0.06] dark:border-white/[0.07] bg-white dark:bg-[#151F32] p-4 sm:p-5 shadow-[0_1px_3px_rgba(0,0,0,0.03)] dark:shadow-[0_1px_3px_rgba(0,0,0,0.2)] hover:border-black/[0.1] dark:hover:border-white/[0.12] transition-all flex flex-col justify-between">
-      {/* Top row: dot + label */}
+      {/* Top row: label */}
       <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <span className={`w-2 h-2 rounded-full ${dotColor}`} />
-          <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
-            {label}
-          </span>
-        </div>
+        <span className="text-xs font-medium text-slate-500 dark:text-slate-400">
+          {label}
+        </span>
         {icon && (
           <div className={`p-1.5 rounded-lg text-slate-400 dark:text-slate-500 ${colorClass || ""}`}>
             {icon}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useLanguage } from "@/context/LanguageContext";
 import {
   FileText,
   ShieldCheck,
@@ -16,9 +17,14 @@ import {
   ExternalLink,
   ChevronRight,
   Info,
+  Clock,
+  Send,
+  UserCheck,
+  AlertCircle,
+  Plus,
 } from "lucide-react";
 
-type DisputeTab = "case" | "actions" | "financial" | "responses" | "evidence" | "notes" | "timeline";
+type LeftStudioTab = "case" | "evidence" | "responses" | "timeline";
 
 type FormAction = (formData: FormData) => void | Promise<void>;
 
@@ -50,32 +56,11 @@ type Props = {
   approveFinancial: FormAction;
   rejectFinancial: FormAction;
   executeRelease: FormAction;
+  reclassify?: FormAction;
 };
 
 function formatDate(value: string | Date | null | undefined) {
   return value ? new Date(value).toLocaleString() : "Not recorded";
-}
-
-function JsonBlock({ value }: { value: unknown }) {
-  return (
-    <pre className="max-h-80 overflow-auto rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-900 text-slate-200 p-3.5 font-mono text-xs leading-5">
-      {JSON.stringify(value || {}, null, 2)}
-    </pre>
-  );
-}
-
-function SurfaceCard({ children, title, subtitle }: { children: React.ReactNode; title?: string; subtitle?: string }) {
-  return (
-    <div className="rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#141E30] p-5 shadow-2xs space-y-4">
-      {title && (
-        <div className="border-b border-black/[0.04] dark:border-white/[0.05] pb-3">
-          <h3 className="text-sm font-bold text-slate-900 dark:text-white">{title}</h3>
-          {subtitle && <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{subtitle}</p>}
-        </div>
-      )}
-      {children}
-    </div>
-  );
 }
 
 export default function AdminDisputeCaseTabs({
@@ -106,14 +91,10 @@ export default function AdminDisputeCaseTabs({
   approveFinancial,
   rejectFinancial,
   executeRelease,
+  reclassify,
 }: Props) {
-  const [activeTab, setActiveTab] = useState<DisputeTab>("case");
-
-  const assignmentMessage = !hasAssignedAdmin
-    ? "This dispute is currently unassigned. Claim the case to begin formal mediation."
-    : !isAssignedToCurrentAdmin
-    ? "This dispute is currently assigned to another mediator. You may reassign it with an audit reason."
-    : null;
+  const { t } = useLanguage();
+  const [activeTab, setActiveTab] = useState<LeftStudioTab>("case");
 
   const canRequestInCurrentState =
     !isTerminal &&
@@ -132,297 +113,567 @@ export default function AdminDisputeCaseTabs({
     }
   };
 
-  const tabs = [
-    { id: "case", label: "Case Overview", icon: Scale },
-    { id: "actions", label: "Mediation Actions", icon: ShieldCheck },
-    { id: "financial", label: "Financial Escrow", icon: Coins },
-    { id: "responses", label: `Responses (${responses.length})`, icon: MessageSquare },
-    { id: "evidence", label: `Evidence (${evidence.length})`, icon: Paperclip },
-    { id: "notes", label: `Notes (${notes.length})`, icon: StickyNote },
-    { id: "timeline", label: `Timeline (${events.length})`, icon: History },
+  const leftTabs = [
+    { id: "case", label: t("admin.disputesDetail.tab.overview"), icon: Scale },
+    { id: "evidence", label: `${t("admin.disputesDetail.tab.evidence")} (${evidence.length})`, icon: Paperclip },
+    { id: "responses", label: `${t("admin.disputesDetail.tab.messages")} (${responses.length})`, icon: MessageSquare },
+    { id: "timeline", label: `Timeline & Notes (${events.length + notes.length})`, icon: History },
   ] as const;
 
+  const escrowAmount = Number(
+    financialCase?.payment_amount || financialCase?.contract_amount || dispute.payment_amount || 0
+  );
+
   return (
-    <div className="space-y-6">
-      {/* 1. Integrated Segmented Tab Switcher */}
-      <div className="flex items-center gap-1 bg-white dark:bg-[#141E30] p-1.5 rounded-xl border border-black/[0.06] dark:border-white/[0.08] shadow-2xs overflow-x-auto no-scrollbar">
-        {tabs.map((tab) => {
-          const isSelected = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setActiveTab(tab.id as DisputeTab)}
-              className={`flex-1 inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
-                isSelected
-                  ? "bg-slate-100 dark:bg-slate-800 text-blue-600 dark:text-blue-400 shadow-2xs font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
-            >
-              <tab.icon className="h-3.5 w-3.5" />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {/* LEFT COLUMN: Evidence & Case Studio (7 or 8 cols) */}
+      <div className="lg:col-span-7 xl:col-span-8 space-y-4">
+        {/* Error Alert */}
+        {actionError && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3.5 text-xs font-semibold text-destructive flex items-center gap-2">
+            <AlertCircle className="w-4 h-4 shrink-0" />
+            <span>{actionError}</span>
+          </div>
+        )}
+
+        {/* Studio Tabs Switcher */}
+        <div className="flex items-center gap-1 bg-card p-1.5 rounded-xl border border-border shadow-xs overflow-x-auto no-scrollbar">
+          {leftTabs.map((tab) => {
+            const isSelected = activeTab === tab.id;
+            const Icon = tab.icon;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as LeftStudioTab)}
+                className={`flex-1 inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                  isSelected
+                    ? "bg-secondary text-foreground border border-border/60 shadow-xs font-bold"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                <Icon className="w-3.5 h-3.5" />
+                <span>{tab.label}</span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* TAB 1: Contract & Claims */}
+        {activeTab === "case" && (
+          <div className="space-y-4">
+            {/* Contract & Transaction Details */}
+            <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-xs">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Contract & Transaction Scope
+              </h3>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                <div className="p-3 rounded-xl bg-secondary/30 border border-border space-y-0.5">
+                  <span className="text-[11px] text-muted-foreground">Job Scope</span>
+                  <p className="font-semibold text-foreground line-clamp-1">
+                    {dispute.job_title || "Skilled trade work"}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-secondary/30 border border-border space-y-0.5">
+                  <span className="text-[11px] text-muted-foreground">Contract Standing</span>
+                  <p className="font-semibold text-foreground">
+                    {dispute.current_contract_status || "Standard"}
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-secondary/30 border border-border space-y-0.5">
+                  <span className="text-[11px] text-muted-foreground">Escrow Custody</span>
+                  <p className="font-mono font-bold text-accent">
+                    ETB {escrowAmount.toLocaleString()}
+                  </p>
+                </div>
+              </div>
+
+              {/* Dispute Narrative Claim */}
+              <div className="space-y-2 pt-1">
+                <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Initiator Dispute Claim
+                </span>
+                <div className="rounded-xl border border-border bg-secondary/20 p-4 text-xs leading-relaxed text-foreground">
+                  {dispute.description ? (
+                    <p className="italic">"{dispute.description}"</p>
+                  ) : (
+                    <span className="text-muted-foreground italic">
+                      No narrative statement filed with this claim.
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Remedy requested */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-secondary/20 border border-border text-xs">
+                <span className="text-muted-foreground">Requested Remedy:</span>
+                <span className="font-semibold text-foreground capitalize">
+                  {dispute.requested_resolution
+                    ? dispute.requested_resolution.replaceAll("_", " ")
+                    : "Mutual settlement"}
+                </span>
+              </div>
+
+              {/* Category Examination & Classification */}
+              <div className="pt-3 border-t border-border/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Examine & Classify Dispute Category
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">Operational categorization</span>
+                </div>
+                {reclassify && !isTerminal ? (
+                  <form action={reclassify} className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { id: "work_quality", label: "Work Quality" },
+                      { id: "payment_issue", label: "Milestone & Escrow" },
+                      { id: "work_not_completed", label: "Non-Completion" },
+                      { id: "contract_violation", label: "Contract Breach" },
+                    ].map((cat) => (
+                      <button
+                        key={cat.id}
+                        type="submit"
+                        name="category"
+                        value={cat.id}
+                        className={`px-2.5 py-2 rounded-lg text-xs font-semibold border transition text-center ${
+                          dispute.category === cat.id
+                            ? "bg-accent text-accent-foreground border-accent shadow-xs"
+                            : "bg-secondary/60 text-muted-foreground border-border hover:text-foreground hover:bg-secondary"
+                        }`}
+                      >
+                        {cat.label}
+                      </button>
+                    ))}
+                  </form>
+                ) : (
+                  <span className="text-xs font-semibold text-foreground capitalize">
+                    {dispute.category ? dispute.category.replaceAll("_", " ") : "Work Quality"}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Resolved Decision Banner (If Terminal) */}
+            {dispute.final_decision && (
+              <div className="rounded-xl border border-success/30 bg-success/10 p-5 space-y-3 shadow-xs">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-5 h-5 text-success" />
+                    <h3 className="text-sm font-bold text-success">
+                      Binding Determination Issued
+                    </h3>
+                  </div>
+                  <span className="font-mono text-xs text-muted-foreground">
+                    {formatDate(dispute.resolved_at)}
+                  </span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  <div className="p-3 rounded-lg bg-card/60 border border-success/20">
+                    <span className="text-[11px] text-muted-foreground">Determination Ruling</span>
+                    <p className="font-bold text-foreground mt-0.5 capitalize">
+                      {String(dispute.final_decision).replaceAll("_", " ")}
+                    </p>
+                  </div>
+                  <div className="p-3 rounded-lg bg-card/60 border border-success/20">
+                    <span className="text-[11px] text-muted-foreground">Decided By</span>
+                    <p className="font-semibold text-foreground mt-0.5">
+                      {dispute.resolved_by_admin_name || dispute.assigned_admin_name || "Mediator"}
+                    </p>
+                  </div>
+                </div>
+                {dispute.final_reason && (
+                  <p className="text-xs text-muted-foreground italic bg-card/40 p-3 rounded-lg border border-success/20">
+                    "{dispute.final_reason}"
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 2: Uploaded Evidence Files */}
+        {activeTab === "evidence" && (
+          <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-xs">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Evidence Repository ({evidence.length})
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Photos, service proofs, and documents uploaded by the disputing parties.
+                </p>
+              </div>
+            </div>
+
+            {evidence.length === 0 ? (
+              <div className="p-12 text-center rounded-xl border border-dashed border-border text-xs text-muted-foreground">
+                <Paperclip className="w-8 h-8 opacity-30 mx-auto mb-2" />
+                <span>No photographic or document evidence uploaded for this dispute.</span>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {evidence.map((item: any) => (
+                  <a
+                    key={item.id}
+                    href={`/api/disputes/${disputeId}/evidence/${item.id}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between p-3.5 rounded-xl border border-border bg-secondary/30 hover:bg-secondary/70 transition text-xs group"
+                  >
+                    <div className="flex items-center gap-2.5 truncate">
+                      <Paperclip className="w-4 h-4 text-accent shrink-0" />
+                      <span className="font-semibold text-foreground truncate group-hover:text-accent">
+                        {item.file_name || "Evidence Attachment"}
+                      </span>
+                    </div>
+                    <ExternalLink className="w-3.5 h-3.5 text-muted-foreground group-hover:text-accent shrink-0 ml-2" />
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* TAB 3: Dispatched Requests & Party Responses */}
+        {activeTab === "responses" && (
+          <div className="space-y-4">
+            {/* Request Information Form (Active Mediators) */}
+            {canRequestInCurrentState && (
+              <div className="rounded-xl border border-border bg-card p-5 space-y-3 shadow-xs">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Dispatch Formal Information Request
+                </h3>
+                <form action={requestInfo} className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground">Recipient</label>
+                      <select
+                        name="target"
+                        className="w-full mt-1 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground"
+                      >
+                        <option value="client">Client ({dispute.client_name || "Client"})</option>
+                        <option value="worker">Artisan ({dispute.worker_name || "Worker"})</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground">Deadline</label>
+                      <input
+                        name="dueAt"
+                        type="date"
+                        className="w-full mt-1 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-muted-foreground">Required Detail</label>
+                      <input
+                        name="instruction"
+                        required
+                        placeholder="e.g. Upload photo of corrected pipe joint"
+                        className="w-full mt-1 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="submit"
+                    className="h-9 px-4 rounded-lg bg-accent text-accent-foreground hover:bg-accent/90 text-xs font-bold transition flex items-center gap-1.5"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Send Request</span>
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* List of responses */}
+            <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-xs">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Participant Submissions ({responses.length})
+              </h3>
+              {responses.length === 0 ? (
+                <div className="p-8 text-center border border-dashed border-border rounded-xl text-xs text-muted-foreground">
+                  No information requests or responses recorded.
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {responses.map((resp: any) => (
+                    <div
+                      key={resp.id}
+                      className="p-3.5 rounded-xl border border-border bg-secondary/20 text-xs space-y-2"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-foreground capitalize">
+                          {resp.requested_from} Response Request
+                        </span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-secondary border border-border text-muted-foreground">
+                          {resp.status}
+                        </span>
+                      </div>
+                      <p className="text-muted-foreground font-medium">{resp.instruction}</p>
+                      {resp.response_text && (
+                        <div className="bg-card p-3 rounded-lg border border-border text-foreground">
+                          {resp.response_text}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: Audit Timeline & Notes */}
+        {activeTab === "timeline" && (
+          <div className="space-y-4">
+            {/* Append Internal Note */}
+            {!isTerminal && canOperate && (
+              <div className="rounded-xl border border-border bg-card p-4 space-y-3 shadow-xs">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Record Internal Mediator Note
+                </h3>
+                <form action={addNote} className="space-y-3">
+                  <textarea
+                    name="note"
+                    rows={2}
+                    required
+                    placeholder="Internal findings, legal assessments, or private mediation observations..."
+                    className="w-full rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-accent"
+                  />
+                  <button
+                    type="submit"
+                    className="h-8 px-4 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-foreground text-xs font-semibold transition"
+                  >
+                    Save Internal Note
+                  </button>
+                </form>
+              </div>
+            )}
+
+            {/* Notes List */}
+            {notes.length > 0 && (
+              <div className="rounded-xl border border-border bg-card p-5 space-y-3 shadow-xs">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                  Internal Notes Archive ({notes.length})
+                </h3>
+                <div className="space-y-2">
+                  {notes.map((n: any) => (
+                    <div
+                      key={n.id}
+                      className="p-3 rounded-xl border border-border bg-secondary/20 text-xs space-y-1"
+                    >
+                      <div className="flex items-center justify-between text-muted-foreground text-[11px]">
+                        <span className="font-semibold text-foreground">
+                          {n.admin_name || n.admin_employee_id || "Mediator"}
+                        </span>
+                        <span className="font-mono">{formatDate(n.created_at)}</span>
+                      </div>
+                      <p className="text-foreground">{n.note}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Chronological Event Timeline */}
+            <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-xs">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                Chronological Dispute Lifecycle ({events.length})
+              </h3>
+              <div className="space-y-3 max-h-96 overflow-y-auto no-scrollbar pt-1">
+                {events.map((ev: any) => (
+                  <div
+                    key={ev.id}
+                    className="relative pl-4 border-l-2 border-border space-y-1 text-xs"
+                  >
+                    <div className="absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-accent" />
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold text-foreground uppercase tracking-wide">
+                        {String(ev.event_type).replaceAll("_", " ")}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        {formatDate(ev.created_at)}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      Actor: <strong className="text-foreground capitalize">{ev.actor_type}</strong>
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* TAB 1: Case Overview */}
-      {activeTab === "case" && (
-        <div className="space-y-5">
-          {/* Top metadata grid */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <SurfaceCard title="Contract Transaction">
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Job Title:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">{dispute.job_title}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Contract Status:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {dispute.current_contract_status || "Standard"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Payment Status:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {dispute.current_payment_status || "Pending"}
-                  </span>
-                </div>
-              </div>
-            </SurfaceCard>
-
-            <SurfaceCard title="Mediation Assignment">
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Assigned Admin:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {dispute.assigned_admin_name || "Unassigned"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Assignment Date:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {formatDate(dispute.assigned_at)}
-                  </span>
-                </div>
-              </div>
-            </SurfaceCard>
-
-            <SurfaceCard title="Dispute Basis">
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Category:</span>
-                  <span className="font-semibold capitalize text-slate-800 dark:text-slate-200">
-                    {dispute.category ? dispute.category.replaceAll("_", " ") : "Breach"}
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-400">Resolution Asked:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {dispute.requested_resolution || "Unspecified"}
-                  </span>
-                </div>
-              </div>
-            </SurfaceCard>
+      {/* RIGHT COLUMN: Sticky Mediation & Escrow Console (4 or 5 cols) */}
+      <div className="lg:col-span-5 xl:col-span-4 space-y-4 lg:sticky lg:top-4">
+        {/* Card 1: Escrow & Financial Overview */}
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Escrow Custody
+            </h3>
+            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-accent/10 text-accent border border-accent/20">
+              <Coins className="w-3 h-3" />
+              <span>ETB Protected</span>
+            </span>
           </div>
 
-          {/* Dispute Statement */}
-          <SurfaceCard title="Submitted Dispute Claim">
-            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed bg-slate-50 dark:bg-slate-900/60 p-4 rounded-xl border border-slate-200/60 dark:border-slate-800">
-              {dispute.description || "No narrative description provided with this dispute."}
+          <div className="rounded-xl bg-secondary/30 p-4 border border-border space-y-1">
+            <span className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">
+              Contract Disputed Value
+            </span>
+            <p className="text-2xl font-bold font-mono text-foreground">
+              ETB {escrowAmount.toLocaleString()}
             </p>
-          </SurfaceCard>
-
-          {/* Final Resolution banner (if resolved) */}
-          {dispute.final_decision && (
-            <SurfaceCard title="Final Mediation Determination">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs mb-3">
-                <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-500/20">
-                  <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
-                    Decision
-                  </span>
-                  <p className="font-bold text-slate-900 dark:text-white mt-0.5">
-                    {String(dispute.final_decision).replaceAll("_", " ")}
-                  </p>
-                </div>
-                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Determined By</span>
-                  <p className="font-semibold text-slate-900 dark:text-white mt-0.5">
-                    {dispute.resolved_by_admin_name || dispute.assigned_admin_name || "Assigned Officer"}
-                  </p>
-                </div>
-                <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Determination Date</span>
-                  <p className="font-semibold text-slate-900 dark:text-white mt-0.5">
-                    {formatDate(dispute.resolved_at)}
-                  </p>
-                </div>
-              </div>
-              {dispute.final_reason && (
-                <p className="text-xs text-slate-600 dark:text-slate-400 bg-slate-50 dark:bg-slate-900/60 p-3 rounded-lg">
-                  {dispute.final_reason}
-                </p>
-              )}
-            </SurfaceCard>
-          )}
-
-          {/* Snapshot & System Evidence */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <SurfaceCard title="Job State & Evidence">
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between py-1 border-b border-black/[0.03] dark:border-white/[0.04]">
-                  <span className="text-slate-400">Job Status:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {dispute.current_job_status}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-black/[0.03] dark:border-white/[0.04]">
-                  <span className="text-slate-400">Contract Terms:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {dispute.terms_status || "Standard"}
-                  </span>
-                </div>
-                <div className="flex justify-between py-1 border-b border-black/[0.03] dark:border-white/[0.04]">
-                  <span className="text-slate-400">Completion Rejection Reason:</span>
-                  <span className="font-semibold text-slate-800 dark:text-slate-200">
-                    {dispute.completion_rejection_reason || "None"}
-                  </span>
-                </div>
-              </div>
-            </SurfaceCard>
-
-            <SurfaceCard title="Case Creation Snapshot">
-              <JsonBlock value={dispute.creation_snapshot} />
-            </SurfaceCard>
+            <p className="text-[11px] text-muted-foreground">
+              Standing: <span className="font-semibold text-foreground">{dispute.payment_status || "Standard Hold"}</span>
+            </p>
           </div>
-        </div>
-      )}
 
-      {/* TAB 2: Mediation Actions */}
-      {activeTab === "actions" && (
-        <div className="space-y-4">
-          {actionError && (
-            <div className="rounded-xl border border-rose-500/30 bg-rose-50 dark:bg-rose-500/10 p-3.5 text-xs font-semibold text-rose-700 dark:text-rose-300">
-              {actionError}
-            </div>
-          )}
-
-          {isTerminal && (
-            <SurfaceCard title="Case Terminal">
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
-                This dispute has reached its terminal status ({String(dispute.status).replaceAll("_", " ")}).
-                Mediation controls, participant assignments, and routine financial proposals are finalized.
-              </p>
-            </SurfaceCard>
-          )}
-
-          {isConflicted && (
-            <SurfaceCard title="Conflict Declared">
-              <p className="text-xs text-rose-600 dark:text-rose-400">
-                You declared a conflict of interest on this dispute. You may inspect the audit record, but cannot execute operational rulings.
-              </p>
-            </SurfaceCard>
-          )}
-
-          {!isTerminal && !isConflicted && (canClaim || canDeclareConflict) && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-              {canClaim && (
-                <SurfaceCard title="Claim or Reassign Case">
-                  <form action={claim} onSubmit={requireReassignReason} className="space-y-3">
-                    <textarea
-                      name="reason"
-                      rows={2}
-                      placeholder="Audit reason required when reassigning another mediator's case..."
-                      className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        name="assignmentAction"
-                        value="claim"
-                        className="h-10 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition"
-                      >
-                        Claim Case
-                      </button>
-                      <button
-                        name="assignmentAction"
-                        value="reassign"
-                        className="h-10 rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 text-slate-700 dark:text-slate-200 text-xs font-semibold transition"
-                      >
-                        Reassign to Me
-                      </button>
-                    </div>
-                  </form>
-                </SurfaceCard>
-              )}
-
-              {canDeclareConflict && (
-                <SurfaceCard title="Declare Conflict of Interest">
-                  <form action={conflict} className="space-y-3">
-                    <textarea
-                      name="reason"
-                      rows={2}
-                      required
-                      placeholder="Explain nature of the conflict (e.g. personal relationship, commercial interest)..."
-                      className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"
-                    />
-                    <button className="h-10 px-4 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-500/10 hover:bg-rose-100 text-rose-600 dark:text-rose-400 text-xs font-semibold transition">
-                      Declare Conflict & Recuse
-                    </button>
-                  </form>
-                </SurfaceCard>
-              )}
-            </div>
-          )}
-
-          {canRequestInCurrentState && (
-            <SurfaceCard title="Request Information from Participant">
-              <form action={requestInfo} className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-400">Recipient</label>
-                    <select
-                      name="target"
-                      className="w-full mt-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs"
-                    >
-                      <option value="client">Client ({dispute.client_name || "Client"})</option>
-                      <option value="worker">Worker ({dispute.worker_name || "Worker"})</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-400">Response Deadline</label>
-                    <input
-                      name="dueAt"
-                      type="date"
-                      className="w-full mt-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-400">Required Detail</label>
-                    <input
-                      name="instruction"
-                      required
-                      placeholder="e.g. Please upload photo of completed pipe installation"
-                      className="w-full mt-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs"
-                    />
-                  </div>
-                </div>
-                <button className="h-10 px-5 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">
-                  Dispatch Request
+          {/* Immediate Escrow Hold / Financial Proposals */}
+          {!isTerminal && canOperate && canResolve && (
+            <div className="space-y-3 pt-1 border-t border-border">
+              <form action={holdPayment}>
+                <button
+                  type="submit"
+                  className="w-full h-9 rounded-lg border border-warning/30 bg-warning/10 hover:bg-warning/20 text-warning text-xs font-semibold transition"
+                >
+                  Place Immediate Escrow Hold
                 </button>
               </form>
-            </SurfaceCard>
+
+              {/* Financial Proposal Form */}
+              <form action={proposeFinancial} className="space-y-2.5 pt-2">
+                <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                  Propose Financial Action
+                </span>
+                <select
+                  name="action"
+                  className="w-full rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground"
+                >
+                  <option value="release_payment">Release 100% to Worker</option>
+                  <option value="refund_review_required">Refund 100% to Client</option>
+                  <option value="partial_refund_review_required">Custom Payout Split (ETB)</option>
+                  <option value="payment_provider_investigation">Gateway Investigation</option>
+                </select>
+                <input
+                  name="amount"
+                  type="number"
+                  min="0"
+                  max={escrowAmount || undefined}
+                  placeholder="Split amount in ETB"
+                  className="w-full rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground"
+                />
+                <textarea
+                  name="reason"
+                  required
+                  rows={2}
+                  placeholder="Financial reasoning for payout..."
+                  className="w-full rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground"
+                />
+                <button
+                  type="submit"
+                  className="w-full h-9 rounded-lg bg-secondary hover:bg-secondary/80 border border-border text-foreground text-xs font-semibold transition"
+                >
+                  Submit Financial Proposal
+                </button>
+              </form>
+            </div>
           )}
 
-          {!isTerminal && canResolve && (
-            <SurfaceCard title="Issue Final Determination">
-              <form action={resolve} className="space-y-3">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {/* Financial proposals log */}
+          {financialCase?.actions && financialCase.actions.length > 0 && (
+            <div className="space-y-2 pt-2 border-t border-border">
+              <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                Financial Decisions Log
+              </span>
+              <div className="space-y-2">
+                {financialCase.actions.map((act: any) => (
+                  <div
+                    key={act.id}
+                    className="p-3 rounded-lg bg-secondary/20 border border-border text-xs space-y-1"
+                  >
+                    <div className="flex justify-between items-center">
+                      <span className="font-semibold text-foreground uppercase text-[10px]">
+                        {String(act.action).replaceAll("_", " ")}
+                      </span>
+                      <span className="font-mono text-accent font-bold">
+                        {act.amount ? `ETB ${Number(act.amount).toLocaleString()}` : "Full"}
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground italic">"{act.reason}"</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Card 2: Mediation Rulings & Determinations */}
+        <div className="rounded-xl border border-border bg-card p-5 space-y-4 shadow-xs">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Mediation Rulings
+          </h3>
+
+          {/* Case Terminal Message */}
+          {isTerminal ? (
+            <div className="p-3.5 rounded-xl bg-secondary/30 border border-border text-xs space-y-1">
+              <p className="font-semibold text-foreground">Determination Finalized</p>
+              <p className="text-muted-foreground">
+                This dispute has reached final determination ({String(dispute.status).replaceAll("_", " ")}).
+                Actions are permanently archived.
+              </p>
+            </div>
+          ) : isConflicted ? (
+            <div className="p-3.5 rounded-xl bg-destructive/10 border border-destructive/20 text-xs text-destructive">
+              You declared a conflict of interest on this dispute. You may inspect the audit history in read-only mode.
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {/* Claim / Reassign */}
+              {canClaim && (
+                <form action={claim} onSubmit={requireReassignReason} className="space-y-2">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Mediator Assignment
+                  </span>
+                  <textarea
+                    name="reason"
+                    rows={2}
+                    placeholder="Audit reason required if reassigning..."
+                    className="w-full rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      name="assignmentAction"
+                      value="claim"
+                      className="h-9 rounded-lg bg-accent text-accent-foreground hover:bg-accent/90 text-xs font-bold transition"
+                    >
+                      Claim Case
+                    </button>
+                    <button
+                      name="assignmentAction"
+                      value="reassign"
+                      className="h-9 rounded-lg border border-border bg-card hover:bg-secondary text-foreground text-xs font-semibold transition"
+                    >
+                      Reassign to Me
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Final Determination Form */}
+              {canResolve && isAssignedToCurrentAdmin && (
+                <form action={resolve} className="space-y-3 pt-2 border-t border-border">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Issue Binding Ruling
+                  </span>
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-400">Determination</label>
+                    <label className="text-[11px] font-medium text-muted-foreground">Determination</label>
                     <select
                       name="decision"
-                      className="w-full mt-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs"
+                      className="w-full mt-1 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground"
                     >
                       <option value="resolved_for_client">Resolved in favour of Client</option>
                       <option value="resolved_for_worker">Resolved in favour of Worker</option>
@@ -433,309 +684,65 @@ export default function AdminDisputeCaseTabs({
                   </div>
 
                   <div>
-                    <label className="text-[10px] uppercase font-bold text-slate-400">Post-Dispute Job Workflow</label>
+                    <label className="text-[11px] font-medium text-muted-foreground">Post-Dispute Job Workflow</label>
                     <select
                       name="operationalOutcome"
                       required
-                      className="w-full mt-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs"
+                      className="w-full mt-1 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground"
                     >
-                      <option value="">Select post-resolution workflow outcome</option>
-                      <option value="redo_work">Redo or correct work - return job to in-progress</option>
+                      <option value="">Select post-resolution workflow</option>
+                      <option value="worker_payment_authorized">Authorize payout - mark job complete</option>
+                      <option value="client_no_payment_cancel">Cancel job with zero payment</option>
+                      <option value="redo_work">Redo work - return job to in-progress</option>
                       <option value="continue_work">Continue work - return job to in-progress</option>
-                      <option value="worker_payment_authorized">Authorize normal payment - mark job completed</option>
-                      <option value="client_no_payment_cancel">Cancel job with zero payment authorization</option>
-                      <option value="restore_previous_state">Restore supported previous workflow state</option>
                     </select>
                   </div>
-                </div>
 
-                <div>
-                  <label className="text-[10px] uppercase font-bold text-slate-400">Legal & Operational Rationale</label>
-                  <textarea
-                    name="reason"
-                    rows={3}
-                    required
-                    placeholder="Provide full reasoning for this determination. This record is permanent."
-                    className="w-full mt-1 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"
-                  />
-                </div>
+                  <div>
+                    <label className="text-[11px] font-medium text-muted-foreground">Rationale</label>
+                    <textarea
+                      name="reason"
+                      rows={2}
+                      required
+                      placeholder="State permanent legal rationale for this determination..."
+                      className="w-full mt-1 rounded-lg border border-border bg-secondary/40 px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground"
+                    />
+                  </div>
 
-                <div className="flex items-center justify-between pt-1">
-                  <button className="h-10 px-5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition">
+                  <button
+                    type="submit"
+                    className="w-full h-10 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold uppercase tracking-wider transition active:scale-[0.98] shadow-xs"
+                  >
                     Execute Binding Determination
                   </button>
-                  <span className="text-[11px] text-slate-400">
-                    Determination is logged to platform immutable audit timeline.
-                  </span>
-                </div>
-              </form>
-            </SurfaceCard>
-          )}
-        </div>
-      )}
-
-      {/* TAB 3: Financial Escrow */}
-      {activeTab === "financial" && (
-        <div className="space-y-4">
-          {!financialCase ? (
-            <SurfaceCard title="Financial Case">
-              <p className="text-xs text-slate-400">No escrow or financial record is linked to this dispute.</p>
-            </SurfaceCard>
-          ) : (
-            <div className="space-y-4">
-              {/* Financial KPI summary */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="p-3 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#141E30]">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Contract Value</span>
-                  <p className="text-base font-bold text-slate-900 dark:text-white mt-0.5">
-                    ETB {Number(financialCase.contract_amount || 0).toLocaleString()}
-                  </p>
-                </div>
-                <div className="p-3 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#141E30]">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Payment Escrow</span>
-                  <p className="text-base font-bold text-blue-600 dark:text-blue-400 mt-0.5">
-                    ETB {Number(financialCase.payment_amount || 0).toLocaleString()}
-                  </p>
-                </div>
-                <div className="p-3 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#141E30]">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Gateway Ref</span>
-                  <p className="text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 mt-1 truncate">
-                    {financialCase.chapa_ref_masked || "Chapa Pending"}
-                  </p>
-                </div>
-                <div className="p-3 rounded-xl border border-black/[0.06] dark:border-white/[0.08] bg-white dark:bg-[#141E30]">
-                  <span className="text-[10px] font-bold uppercase text-slate-400">Hold Standing</span>
-                  <p className="text-xs font-semibold text-amber-600 dark:text-amber-400 mt-1">
-                    {financialCase.financial_hold_status || "Standard Hold"}
-                  </p>
-                </div>
-              </div>
-
-              {!isTerminal && canOperate && canResolve && (
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                  <SurfaceCard title="Place Escrow Hold">
-                    <form action={holdPayment} className="space-y-3">
-                      <textarea
-                        name="reason"
-                        required
-                        rows={2}
-                        placeholder="State financial reason for locking escrow funds..."
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs"
-                      />
-                      <button className="h-9 px-4 rounded-lg border border-rose-200 dark:border-rose-900 bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-semibold transition">
-                        Apply Immediate Escrow Hold
-                      </button>
-                    </form>
-                  </SurfaceCard>
-
-                  <SurfaceCard title="Propose Escrow Action">
-                    <form action={proposeFinancial} className="space-y-3">
-                      <div className="grid grid-cols-2 gap-2">
-                        <select
-                          name="action"
-                          className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs"
-                        >
-                          <option value="release_payment">Release Payment to Worker</option>
-                          <option value="refund_review_required">Full Refund to Client</option>
-                          <option value="partial_refund_review_required">Partial Refund Split</option>
-                          <option value="payment_provider_investigation">Provider Investigation</option>
-                        </select>
-                        <input
-                          name="amount"
-                          type="number"
-                          min="0"
-                          placeholder="Amount in ETB"
-                          className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs"
-                        />
-                      </div>
-                      <textarea
-                        name="reason"
-                        required
-                        rows={2}
-                        placeholder="Proposal rationale..."
-                        className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs"
-                      />
-                      <button className="h-9 px-4 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold transition">
-                        Submit Financial Proposal
-                      </button>
-                    </form>
-                  </SurfaceCard>
-                </div>
+                </form>
               )}
 
-              {/* Financial History */}
-              <SurfaceCard title="Financial Actions Log">
-                {financialCase.actions.length === 0 ? (
-                  <p className="text-xs text-slate-400">No financial actions recorded.</p>
-                ) : (
-                  <div className="space-y-3">
-                    {financialCase.actions.map((act: any) => (
-                      <div
-                        key={act.id}
-                        className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 text-xs space-y-1.5"
-                      >
-                        <div className="flex items-center justify-between">
-                          <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
-                            {String(act.action).replaceAll("_", " ")}
-                          </span>
-                          <span className="font-mono text-slate-400 text-[10px]">
-                            {formatDate(act.created_at)}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-blue-50 dark:bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                            {act.proposal_status}
-                          </span>
-                          {act.amount && (
-                            <span className="font-mono font-bold text-slate-700 dark:text-slate-300">
-                              ETB {Number(act.amount).toLocaleString()}
-                            </span>
-                          )}
-                        </div>
-                        {act.reason && <p className="text-slate-600 dark:text-slate-400 italic">"{act.reason}"</p>}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </SurfaceCard>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 4: Responses */}
-      {activeTab === "responses" && (
-        <SurfaceCard title="Party Responses">
-          {responses.length === 0 ? (
-            <p className="text-xs text-slate-400">No response requests dispatched.</p>
-          ) : (
-            <div className="space-y-3">
-              {responses.map((resp: any) => (
-                <div
-                  key={resp.id}
-                  className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 text-xs space-y-1.5"
-                >
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 dark:text-slate-200 capitalize">
-                      {resp.requested_from} Response
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
-                      {resp.status}
-                    </span>
-                  </div>
-                  <p className="text-slate-600 dark:text-slate-400 font-medium">{resp.instruction}</p>
-                  {resp.response_text && (
-                    <div className="bg-white dark:bg-slate-950 p-2.5 rounded-lg border border-slate-200/80 dark:border-slate-800 text-slate-800 dark:text-slate-200 mt-2">
-                      {resp.response_text}
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          )}
-        </SurfaceCard>
-      )}
-
-      {/* TAB 5: Evidence */}
-      {activeTab === "evidence" && (
-        <SurfaceCard title="Uploaded Evidence Files">
-          {evidence.length === 0 ? (
-            <p className="text-xs text-slate-400">No evidence documents uploaded by either party.</p>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {evidence.map((item: any) => (
-                <a
-                  key={item.id}
-                  href={`/api/disputes/${disputeId}/evidence/${item.id}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="flex items-center justify-between p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 hover:bg-blue-50 dark:bg-slate-900 dark:hover:bg-slate-800/80 transition text-xs group"
-                >
-                  <div className="flex items-center gap-2.5 truncate">
-                    <Paperclip className="h-4 w-4 text-blue-500 shrink-0" />
-                    <span className="font-semibold text-slate-800 dark:text-slate-200 truncate group-hover:text-blue-600">
-                      {item.file_name || "Evidence Attachment"}
-                    </span>
-                  </div>
-                  <ExternalLink className="h-3.5 w-3.5 text-slate-400 group-hover:text-blue-600 shrink-0 ml-2" />
-                </a>
-              ))}
-            </div>
-          )}
-        </SurfaceCard>
-      )}
-
-      {/* TAB 6: Notes */}
-      {activeTab === "notes" && (
-        <div className="space-y-4">
-          {!isTerminal && canOperate && (
-            <SurfaceCard title="Append Internal Administrative Note">
-              <form action={addNote} className="space-y-3">
-                <textarea
-                  name="note"
-                  rows={3}
-                  required
-                  placeholder="Record internal findings, legal notes, or private observations (invisible to client and worker)..."
-                  className="w-full rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-3 py-2 text-xs text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none"
-                />
-                <button className="h-9 px-4 rounded-lg bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-semibold transition">
-                  Save Note
-                </button>
-              </form>
-            </SurfaceCard>
-          )}
-
-          <SurfaceCard title="Internal Audit Notes">
-            {notes.length === 0 ? (
-              <p className="text-xs text-slate-400">No internal notes on file.</p>
-            ) : (
-              <div className="space-y-3">
-                {notes.map((n: any) => (
-                  <div
-                    key={n.id}
-                    className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 text-xs space-y-1"
+              {/* Conflict of Interest */}
+              {canDeclareConflict && (
+                <form action={conflict} className="pt-2 border-t border-border space-y-2">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Recusal
+                  </span>
+                  <textarea
+                    name="reason"
+                    rows={1}
+                    required
+                    placeholder="Nature of personal or commercial conflict..."
+                    className="w-full rounded-lg border border-border bg-secondary/40 px-3 py-1.5 text-xs text-foreground placeholder:text-muted-foreground"
+                  />
+                  <button
+                    type="submit"
+                    className="w-full h-8 rounded-lg border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 text-destructive text-xs font-semibold transition"
                   >
-                    <div className="flex items-center justify-between text-slate-400">
-                      <span className="font-semibold text-slate-700 dark:text-slate-300">
-                        {n.admin_name || n.admin_employee_id || "Officer"}
-                      </span>
-                      <span className="font-mono text-[10px]">{formatDate(n.created_at)}</span>
-                    </div>
-                    <p className="text-slate-800 dark:text-slate-200 mt-1">{n.note}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </SurfaceCard>
+                    Declare Conflict & Recuse
+                  </button>
+                </form>
+              )}
+            </div>
+          )}
         </div>
-      )}
-
-      {/* TAB 7: Timeline */}
-      {activeTab === "timeline" && (
-        <SurfaceCard title="Mediation Audit Timeline">
-          <div className="space-y-3 max-h-96 overflow-y-auto no-scrollbar pt-1">
-            {events.map((ev: any) => (
-              <div
-                key={ev.id}
-                className="relative pl-4 border-l-2 border-slate-200 dark:border-slate-800 space-y-1 text-xs"
-              >
-                <div className="absolute -left-[5px] top-1 w-2 h-2 rounded-full bg-indigo-500" />
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wide">
-                    {String(ev.event_type).replaceAll("_", " ")}
-                  </span>
-                  <span className="text-[10px] text-slate-400 font-mono">
-                    {formatDate(ev.created_at)}
-                  </span>
-                </div>
-                <p className="text-[11px] text-slate-500">
-                  Actor: <strong className="text-slate-600 dark:text-slate-400">{ev.actor_type}</strong>
-                </p>
-              </div>
-            ))}
-          </div>
-        </SurfaceCard>
-      )}
+      </div>
     </div>
   );
 }
